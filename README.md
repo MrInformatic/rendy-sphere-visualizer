@@ -21,6 +21,15 @@ These instructions will get you a copy of the project up and running on your loc
 Pleas go to [rustup.rs](https://rustup.rs/) and follow the 
 instructions. It will be quick and painless (hopefully).
 
+This repository uses [git-lfs](https://git-lfs.github.com/). 
+Please go ahead and download and install git-lfs. Please
+make sure after you have cloned the repository, that you
+pulled the lfs-file with following command.
+
+```
+git lfs pull
+```
+
 ### Installing
 
 If you have installed rustup and successfully cloned the 
