@@ -1,20 +1,20 @@
 #version 450
 
 layout(set = 0, binding = 0) uniform samplerCube environment;
-
-layout(std140, set = 1, binding = 0) uniform Args {
+layout(std140, set = 0, binding = 1) uniform Args {
     mat4 inversed_view_matrix;
     vec3 ambient;
     vec3 light_color;
     vec3 light_position;
 };
-layout(set = 1, binding = 1) uniform sampler fullscreen_sampler;
-layout(set = 1, binding = 2) uniform texture2D texture_position;
-layout(set = 1, binding = 3) uniform texture2D texture_normal;
-layout(set = 1, binding = 4) uniform texture2D texture_color;
-layout(set = 1, binding = 5) uniform texture2D texture_n;
-layout(set = 1, binding = 6) uniform texture2D texture_occlusion;
-layout(set = 1, binding = 7) uniform texture2D texture_shadow;
+
+layout(set = 1, binding = 0) uniform sampler fullscreen_sampler;
+layout(set = 1, binding = 1) uniform texture2D texture_position;
+layout(set = 1, binding = 2) uniform texture2D texture_normal;
+layout(set = 1, binding = 3) uniform texture2D texture_color;
+layout(set = 1, binding = 4) uniform texture2D texture_n;
+layout(set = 1, binding = 5) uniform texture2D texture_occlusion;
+layout(set = 1, binding = 6) uniform texture2D texture_shadow;
 
 layout(location = 0) out vec4 o_color;
 

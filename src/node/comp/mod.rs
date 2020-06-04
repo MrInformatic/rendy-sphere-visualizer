@@ -133,26 +133,35 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
         Layout {
             sets: vec![
                 SetLayout {
-                    bindings: vec![DescriptorSetLayoutBinding {
-                        binding: 0,
-                        ty: DescriptorType::CombinedImageSampler,
-                        count: 1,
-                        stage_flags: ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    }],
-                },
-                SetLayout {
                     bindings: vec![
                         DescriptorSetLayoutBinding {
                             binding: 0,
-                            ty: DescriptorType::UniformBuffer,
+                            ty: DescriptorType::CombinedImageSampler,
                             count: 1,
                             stage_flags: ShaderStageFlags::FRAGMENT,
                             immutable_samplers: false,
                         },
                         DescriptorSetLayoutBinding {
                             binding: 1,
+                            ty: DescriptorType::UniformBuffer,
+                            count: 1,
+                            stage_flags: ShaderStageFlags::FRAGMENT,
+                            immutable_samplers: false,
+                        },
+                    ],
+                },
+                SetLayout {
+                    bindings: vec![
+                        DescriptorSetLayoutBinding {
+                            binding: 0,
                             ty: DescriptorType::Sampler,
+                            count: 1,
+                            stage_flags: ShaderStageFlags::FRAGMENT,
+                            immutable_samplers: false,
+                        },
+                        DescriptorSetLayoutBinding {
+                            binding: 1,
+                            ty: DescriptorType::SampledImage,
                             count: 1,
                             stage_flags: ShaderStageFlags::FRAGMENT,
                             immutable_samplers: false,
@@ -192,13 +201,6 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
                             stage_flags: ShaderStageFlags::FRAGMENT,
                             immutable_samplers: false,
                         },
-                        DescriptorSetLayoutBinding {
-                            binding: 7,
-                            ty: DescriptorType::SampledImage,
-                            count: 1,
-                            stage_flags: ShaderStageFlags::FRAGMENT,
-                            immutable_samplers: false,
-                        },
                     ],
                 },
             ],
@@ -217,7 +219,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        aux: &T,
+        _aux: &T,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -239,7 +241,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
 
         let uniform_indirect_calculator = CombinedBufferCalculator::new(
             vec![element::<Args>(), element::<DrawIndexedCommand>()],
-            1,
+            frames as u64,
             align,
         );
 
@@ -290,61 +292,63 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
             .expect("failed to create sampler");
 
         unsafe {
-            factory.write_descriptor_sets(Some(DescriptorSetWrite {
-                set: uniform_set.raw(),
-                binding: 0,
-                array_offset: 0,
-                descriptors: Some(Descriptor::Buffer(
-                    uniform_indirect_buffer.raw(),
-                    uniform_indirect_calculator.option_range(0, 0),
-                )),
-            }));
+            factory.write_descriptor_sets(environment_sets.iter().enumerate().map(
+                |(frame, environment_set)| DescriptorSetWrite {
+                    set: environment_set.raw(),
+                    binding: 1,
+                    array_offset: 0,
+                    descriptors: Some(Descriptor::Buffer(
+                        uniform_indirect_buffer.raw(),
+                        uniform_indirect_calculator.option_range(0, frame),
+                    )),
+                },
+            ));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 1,
+                binding: 0,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Sampler(sampler.raw())),
             }));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 2,
+                binding: 1,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(pos_view.raw(), pos.layout)),
             }));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 3,
+                binding: 2,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(norm_view.raw(), norm.layout)),
             }));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 4,
+                binding: 3,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(color_view.raw(), color.layout)),
             }));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 5,
+                binding: 4,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(n_view.raw(), n.layout)),
             }));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 6,
+                binding: 5,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(occlusion_view.raw(), occlusion.layout)),
             }));
 
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: uniform_set.raw(),
-                binding: 7,
+                binding: 6,
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(shadow_view.raw(), shadow.layout)),
             }));
@@ -353,41 +357,24 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
         let fullscreen_triangle = create_fullscreen_triangle(factory, queue)
             .expect("failed to create fullscreen triangle");
 
-        let draw_indexed_command = DrawIndexedCommand {
-            first_index: 0,
-            first_instance: 0,
-            vertex_offset: 0,
-            index_count: fullscreen_triangle.len(),
-            instance_count: 1,
-        };
+        for frame in 0..frames {
+            let draw_indexed_command = DrawIndexedCommand {
+                first_index: 0,
+                first_instance: 0,
+                vertex_offset: 0,
+                index_count: fullscreen_triangle.len(),
+                instance_count: 1,
+            };
 
-        let args = Args {
-            ambient: aux.get_ambient_light().clone().into(),
-            light_color: aux.get_light().get_color().clone().into(),
-            light_position: transform_point(
-                aux.get_light().get_position(),
-                aux.get_camera().get_view_matrix(),
-            )
-            .into(),
-            inversed_view_matrix: inverse(aux.get_camera().get_view_matrix()).into(),
-        };
-
-        unsafe {
-            factory
-                .upload_visible_buffer(
-                    &mut uniform_indirect_buffer,
-                    uniform_indirect_calculator.offset(0, 0),
-                    &[args],
-                )
-                .expect("failed to upload uniforms");
-
-            factory
-                .upload_visible_buffer(
-                    &mut uniform_indirect_buffer,
-                    uniform_indirect_calculator.offset(1, 0),
-                    &[draw_indexed_command],
-                )
-                .expect("failed to upload indirect draw commands");
+            unsafe {
+                factory
+                    .upload_visible_buffer(
+                        &mut uniform_indirect_buffer,
+                        uniform_indirect_calculator.offset(1, frame as usize),
+                        &[draw_indexed_command],
+                    )
+                    .expect("failed to upload indirect draw commands");
+            }
         }
 
         Ok(Comp {
@@ -434,7 +421,26 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for Comp<B> {
         index: usize,
         aux: &T,
     ) -> PrepareResult {
+        let args = Args {
+            ambient: aux.get_ambient_light().clone().into(),
+            light_color: aux.get_light().get_color().clone().into(),
+            light_position: transform_point(
+                aux.get_light().get_position(),
+                aux.get_camera().get_view_matrix(),
+            )
+            .into(),
+            inversed_view_matrix: inverse(aux.get_camera().get_view_matrix()).into(),
+        };
+
         unsafe {
+            factory
+                .upload_visible_buffer(
+                    &mut self.uniform_indirect_buffer,
+                    self.uniform_indirect_calculator.offset(0, index),
+                    &[args],
+                )
+                .expect("failed to upload uniforms");
+
             factory.write_descriptor_sets(Some(DescriptorSetWrite {
                 set: self.environment_sets[index].raw(),
                 binding: 0,
