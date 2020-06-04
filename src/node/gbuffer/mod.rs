@@ -370,7 +370,6 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for GBuffer<B> {
         }
 
         unsafe {
-            //encoder.draw_indexed(0..self.sphere_mesh.len(), 0, 0.._aux.sphere_count() as u32)
             encoder.draw_indexed_indirect(
                 self.uniform_indirect_instance_buffer.raw(),
                 self.uniform_indirect_instance_calculator.offset(1, index),
