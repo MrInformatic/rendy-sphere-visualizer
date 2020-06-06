@@ -4,10 +4,11 @@ use genmesh::EmitTriangles;
 use nalgebra_glm::{vec3_to_vec4, vec4_to_vec3, Mat4, Vec3};
 use rendy::command::QueueId;
 use rendy::factory::{Factory, UploadError};
-use rendy::graph::{GraphBuilder, GraphContext, ImageId, NodeImage, ImageAccess};
+use rendy::graph::{GraphBuilder, GraphContext, ImageAccess, ImageId, NodeImage};
 use rendy::hal::command::{ClearColor, ClearValue};
 use rendy::hal::format::{Format, Swizzle};
-use rendy::hal::pso::Primitive;
+use rendy::hal::image::{Access as IAccess, Layout as ILayout, Usage as IUsage};
+use rendy::hal::pso::{PipelineStage, Primitive};
 use rendy::hal::Backend;
 use rendy::init::winit::dpi::PhysicalSize;
 use rendy::mesh::{AsVertex, Mesh, Position};
@@ -82,8 +83,8 @@ pub const CUBEMAP_SAMPLER_DESC: SamplerDesc = SamplerDesc {
 pub const SAMPLED_IMAGE_IMAGE_ACCESS: ImageAccess = ImageAccess {
     access: IAccess::SHADER_READ,
     usage: IUsage::SAMPLED,
-    layout: resource::Layout::ShaderReadOnlyOptimal,
-    stages: PipelineStage::FRAGMENT_SHADER
+    layout: ILayout::ShaderReadOnlyOptimal,
+    stages: PipelineStage::FRAGMENT_SHADER,
 };
 
 pub fn create_fullscreen_triangle<B: Backend>(

@@ -1,4 +1,7 @@
-use crate::ext::{create_fullscreen_triangle, GraphContextExt, FULLSCREEN_SAMPLER_DESC, SAMPLED_IMAGE_IMAGE_ACCESS};
+use crate::ext::{
+    create_fullscreen_triangle, GraphContextExt, FULLSCREEN_SAMPLER_DESC,
+    SAMPLED_IMAGE_IMAGE_ACCESS,
+};
 use crate::mem::{element, CombinedBufferCalculator};
 use crate::node::dfao::DFAOParams;
 use crate::scene::SceneView;
@@ -10,11 +13,11 @@ use rendy::hal::adapter::PhysicalDevice;
 use rendy::hal::buffer::Usage as BUsage;
 use rendy::hal::device::Device;
 use rendy::hal::format::{Format, Swizzle};
-use rendy::hal::image::{Access as IAccess, Layout as ILayout, Usage as IUsage, ViewKind};
+use rendy::hal::image::ViewKind;
 use rendy::hal::pso::{
     BlendOp, BlendState, ColorBlendDesc, ColorMask, CreationError, DepthStencilDesc, Descriptor,
     DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, Factor,
-    PipelineStage, Rasterizer, ShaderStageFlags, VertexInputRate,
+    Rasterizer, ShaderStageFlags, VertexInputRate,
 };
 use rendy::hal::Backend;
 use rendy::memory::Dynamic;

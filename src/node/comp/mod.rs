@@ -1,5 +1,5 @@
-use crate::ext::{GraphContextExt, SAMPLED_IMAGE_IMAGE_ACCESS};
 use crate::ext::{create_fullscreen_triangle, transform_point, Std140, FULLSCREEN_SAMPLER_DESC};
+use crate::ext::{GraphContextExt, SAMPLED_IMAGE_IMAGE_ACCESS};
 use crate::mem::{element, CombinedBufferCalculator};
 use crate::scene::SceneView;
 
@@ -9,12 +9,11 @@ use rendy::core::hal::adapter::PhysicalDevice;
 use rendy::core::hal::buffer::Usage as BUsage;
 use rendy::core::hal::device::Device;
 use rendy::core::hal::format::{Format, Swizzle};
-use rendy::core::hal::image::{Access as IAccess, Layout as ILayout, Usage as IUsage};
 
 use rendy::core::hal::pso::{
     BlendState, ColorBlendDesc, ColorMask, CreationError, DepthStencilDesc, Descriptor,
-    DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, PipelineStage,
-    Rasterizer, ShaderStageFlags, VertexInputRate,
+    DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, Rasterizer,
+    ShaderStageFlags, VertexInputRate,
 };
 use rendy::core::hal::Backend;
 use rendy::factory::Factory;
@@ -22,9 +21,9 @@ use rendy::graph::render::{
     Layout, PrepareResult, SetLayout, SimpleGraphicsPipeline, SimpleGraphicsPipelineDesc,
 };
 use rendy::graph::{GraphContext, ImageAccess, NodeBuffer, NodeImage};
+use rendy::hal::image::Layout as ILayout;
 use rendy::memory::Dynamic;
 use rendy::mesh::{AsVertex, Mesh, Position};
-use rendy::resource;
 use rendy::resource::{
     Buffer, BufferInfo, DescriptorSet, DescriptorSetLayout, Escape, Handle, ImageView, Sampler,
     ViewKind,

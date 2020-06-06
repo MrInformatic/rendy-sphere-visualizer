@@ -1,4 +1,6 @@
-use crate::ext::{transform_point, GraphContextExt, Std140, FULLSCREEN_SAMPLER_DESC, SAMPLED_IMAGE_IMAGE_ACCESS};
+use crate::ext::{
+    transform_point, GraphContextExt, Std140, FULLSCREEN_SAMPLER_DESC, SAMPLED_IMAGE_IMAGE_ACCESS,
+};
 use crate::mem::{element, element_multi, CombinedBufferCalculator};
 
 use crate::scene::SceneView;
@@ -16,11 +18,11 @@ use rendy::hal::adapter::PhysicalDevice;
 use rendy::hal::buffer::Usage as BUsage;
 use rendy::hal::device::Device;
 use rendy::hal::format::{Format, Swizzle};
-use rendy::hal::image::{Access as IAccess, Layout as ILayout, Usage as IUsage, ViewKind};
+use rendy::hal::image::ViewKind;
 use rendy::hal::pso::{
     BlendOp, BlendState, ColorBlendDesc, ColorMask, CreationError, DepthStencilDesc, Descriptor,
-    DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, PipelineStage,
-    Primitive, Rasterizer, ShaderStageFlags, VertexInputRate,
+    DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, Primitive,
+    Rasterizer, ShaderStageFlags, VertexInputRate,
 };
 use rendy::hal::Backend;
 use rendy::memory::{Dynamic, Write};
