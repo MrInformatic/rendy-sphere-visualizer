@@ -190,12 +190,12 @@ pub fn build_graph<B: Backend, O: Output<B>>(
 ) -> Result<Graph<B, Scene<B>>, Error> {
     let mut graph_builder = GraphBuilder::new().with_frames_in_flight(3);
 
-    let sfloat_4d_format = choose_format(
+    let shalf_4d_format = choose_format(
         factory,
         &[
+            Format::Rgba16Sfloat,
             Format::Rgba32Sfloat,
             Format::Rgba64Sfloat,
-            Format::Rgba16Sfloat,
         ],
         Tiling::Optimal,
         ImageFeature::COLOR_ATTACHMENT | ImageFeature::SAMPLED,
@@ -210,13 +210,27 @@ pub fn build_graph<B: Backend, O: Output<B>>(
     )
     .ok_or(anyhow!("could not find any 1d sfloat format"))?;
 
-    let unorm_4d_format = choose_format(
+    let byte_unorm_4d_format = choose_format(
         factory,
         &[Format::Rgba8Unorm, Format::Bgra8Unorm],
         Tiling::Optimal,
         ImageFeature::COLOR_ATTACHMENT,
     )
-    .ok_or(anyhow!("could not find any 4d unorm format"))?;
+    .ok_or(anyhow!("could not find any 4d byte unorm format"))?;
+
+    let normal_format = choose_format(
+        factory,
+        &[
+            Format::A2r10g10b10Unorm,
+            Format::A2b10g10r10Unorm,
+            Format::Rgba16Unorm,
+            Format::Rgba8Unorm,
+            Format::Bgra8Unorm,
+        ],
+        Tiling::Optimal,
+        ImageFeature::COLOR_ATTACHMENT,
+    )
+    .ok_or(anyhow!("could not find any 4d word unorm format"))?;
 
     let depth_stencil_format = choose_format(
         factory,
@@ -235,7 +249,7 @@ pub fn build_graph<B: Backend, O: Output<B>>(
     let gbuffer_pos = graph_builder.create_image(
         Kind::D2(extend.width, extend.height, 1, 1),
         1,
-        sfloat_4d_format,
+        shalf_4d_format,
         Some(ClearValue {
             color: ClearColor {
                 float32: [0.0, 0.0, 0.0, 1.0],
@@ -246,7 +260,7 @@ pub fn build_graph<B: Backend, O: Output<B>>(
     let gbuffer_norm = graph_builder.create_image(
         Kind::D2(extend.width, extend.height, 1, 1),
         1,
-        sfloat_4d_format,
+        normal_format,
         Some(ClearValue {
             color: ClearColor {
                 float32: [0.0, 0.0, 0.0, 1.0],
@@ -257,7 +271,7 @@ pub fn build_graph<B: Backend, O: Output<B>>(
     let gbuffer_color = graph_builder.create_image(
         Kind::D2(extend.width, extend.height, 1, 1),
         1,
-        unorm_4d_format,
+        byte_unorm_4d_format,
         Some(ClearValue {
             color: ClearColor {
                 float32: [1.0, 1.0, 1.0, 1.0],

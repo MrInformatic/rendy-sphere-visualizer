@@ -18,11 +18,19 @@ layout(set = 1, binding = 6) uniform texture2D texture_shadow;
 
 layout(location = 0) out vec4 o_color;
 
+vec3 normal_from_unorm(vec3 normal) {
+    return vec3(
+        (normal.x - 0.5) * 2.0,
+        (normal.y - 0.5) * 2.0,
+        normal.z
+    );
+}
+
 void main() {
     vec2 frag_coord = gl_FragCoord.xy;
 
     vec3 position = texture(sampler2D(texture_position, fullscreen_sampler), frag_coord).xyz;
-    vec3 normal =  texture(sampler2D(texture_normal, fullscreen_sampler), frag_coord).xyz;
+    vec3 normal =  normal_from_unorm(texture(sampler2D(texture_normal, fullscreen_sampler), frag_coord).xyz);
     vec3 color = texture(sampler2D(texture_color, fullscreen_sampler), frag_coord).rgb;
     float n = texture(sampler2D(texture_n, fullscreen_sampler), frag_coord).r;
     float occlusion = texture(sampler2D(texture_occlusion, fullscreen_sampler), frag_coord).r;

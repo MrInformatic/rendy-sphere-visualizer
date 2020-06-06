@@ -14,9 +14,17 @@ layout(location = 1) in float frag_radius;
 
 layout(location = 0) out vec4 out_distance;
 
+vec3 normal_from_unorm(vec3 normal) {
+    return vec3(
+        (normal.x - 0.5) * 2.0,
+        (normal.y - 0.5) * 2.0,
+        normal.z
+    );
+}
+
 void main() {
     vec3 pos = texture(sampler2D(texture_position, fullscreen_sampler), gl_FragCoord.xy).xyz;
-    vec3 norm = texture(sampler2D(texture_normal, fullscreen_sampler), gl_FragCoord.xy).xyz;
+    vec3 norm = normal_from_unorm(texture(sampler2D(texture_normal, fullscreen_sampler), gl_FragCoord.xy).xyz);
 
     out_distance = vec4(distance(pos + norm * offset, frag_center) - frag_radius, 0.0, 0.0, 0.0);
 }
