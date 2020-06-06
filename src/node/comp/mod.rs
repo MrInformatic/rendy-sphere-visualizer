@@ -1,4 +1,4 @@
-use crate::ext::GraphContextExt;
+use crate::ext::{GraphContextExt, SAMPLED_IMAGE_IMAGE_ACCESS};
 use crate::ext::{create_fullscreen_triangle, transform_point, Std140, FULLSCREEN_SAMPLER_DESC};
 use crate::mem::{element, CombinedBufferCalculator};
 use crate::scene::SceneView;
@@ -68,42 +68,12 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
 
     fn images(&self) -> Vec<ImageAccess> {
         vec![
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: resource::Layout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: resource::Layout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: resource::Layout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: resource::Layout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: resource::Layout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: resource::Layout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
+            SAMPLED_IMAGE_IMAGE_ACCESS,
+            SAMPLED_IMAGE_IMAGE_ACCESS,
+            SAMPLED_IMAGE_IMAGE_ACCESS,
+            SAMPLED_IMAGE_IMAGE_ACCESS,
+            SAMPLED_IMAGE_IMAGE_ACCESS,
+            SAMPLED_IMAGE_IMAGE_ACCESS,
         ]
     }
 

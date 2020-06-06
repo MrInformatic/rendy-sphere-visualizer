@@ -1,6 +1,4 @@
-use crate::ext::{
-    create_mesh_from_shape, transform_point, GraphContextExt, Std140, FULLSCREEN_SAMPLER_DESC,
-};
+use crate::ext::{create_mesh_from_shape, transform_point, GraphContextExt, Std140, FULLSCREEN_SAMPLER_DESC, SAMPLED_IMAGE_IMAGE_ACCESS};
 use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::node::dfao::DFAOParams;
 use crate::scene::SceneView;
@@ -88,18 +86,8 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOSpher
 
     fn images(&self) -> Vec<ImageAccess> {
         vec![
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: ILayout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
-            ImageAccess {
-                access: IAccess::SHADER_READ,
-                usage: IUsage::SAMPLED,
-                layout: ILayout::ShaderReadOnlyOptimal,
-                stages: PipelineStage::FRAGMENT_SHADER,
-            },
+            SAMPLED_IMAGE_IMAGE_ACCESS,
+            SAMPLED_IMAGE_IMAGE_ACCESS,
         ]
     }
 
