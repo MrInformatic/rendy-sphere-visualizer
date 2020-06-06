@@ -86,7 +86,9 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOSpher
 
     fn images(&self) -> Vec<ImageAccess> {
         vec![
+            // position
             SAMPLED_IMAGE_IMAGE_ACCESS,
+            // normal
             SAMPLED_IMAGE_IMAGE_ACCESS,
         ]
     }

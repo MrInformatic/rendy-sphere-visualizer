@@ -68,11 +68,17 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
 
     fn images(&self) -> Vec<ImageAccess> {
         vec![
+            // pos
             SAMPLED_IMAGE_IMAGE_ACCESS,
+            // norm
             SAMPLED_IMAGE_IMAGE_ACCESS,
+            // color
             SAMPLED_IMAGE_IMAGE_ACCESS,
+            // n
             SAMPLED_IMAGE_IMAGE_ACCESS,
+            // occlusion
             SAMPLED_IMAGE_IMAGE_ACCESS,
+            // shadow
             SAMPLED_IMAGE_IMAGE_ACCESS,
         ]
     }
