@@ -3,8 +3,12 @@ use crate::ext::{
 };
 use crate::mem::{element, element_multi, CombinedBufferCalculator};
 
-use crate::scene::SceneView;
-
+use crate::scene::camera::Camera;
+use crate::scene::environment::Environment;
+use crate::scene::limits::Limits;
+use crate::scene::sphere::Sphere;
+use legion::query::{IntoQuery, Read};
+use legion::world::World;
 use nalgebra_glm::{
     identity, quat, quat_normalize, quat_to_mat4, scale, translate, vec3, Mat4, Vec3,
 };
@@ -111,7 +115,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub struct RTSHSphereDesc;
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for RTSHSphereDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for RTSHSphereDesc {
     type Pipeline = RTSHSphere<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -181,7 +185,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for RTSHSpher
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &T) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("failed to compile shader set")
@@ -192,7 +196,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for RTSHSpher
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        aux: &T,
+        aux: &World,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -211,7 +215,12 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for RTSHSpher
             .limits()
             .min_uniform_buffer_offset_alignment;
 
-        let sphere_count = aux.sphere_count();
+        let limits = aux
+            .resources
+            .get::<Limits>()
+            .expect("limits was not inserted into world");
+
+        let sphere_count = limits.sphere_count();
 
         let uniform_indirect_instance_calculator = CombinedBufferCalculator::new(
             vec![
@@ -309,7 +318,7 @@ pub struct RTSHSphere<B: Backend> {
     cone_mesh: Mesh<B>,
 }
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for RTSHSphere<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
     type Desc = RTSHSphereDesc;
 
     fn prepare(
@@ -318,10 +327,25 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for RTSHSphere<B>
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &T,
+        aux: &World,
     ) -> PrepareResult {
+        let environment = aux
+            .resources
+            .get::<Environment<B>>()
+            .expect("environment was not inserted into world");
+
+        let limits = aux
+            .resources
+            .get::<Limits>()
+            .expect("limits was not inserted into world");
+
+        let camera = aux
+            .resources
+            .get::<Camera>()
+            .expect("camera was not inserted into world");
+
         let args = Args {
-            light_position: aux.get_light().get_position().clone().into(),
+            light_position: environment.light().get_position().clone().into(),
         };
 
         unsafe {
@@ -339,7 +363,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for RTSHSphere<B>
             first_instance: 0,
             vertex_offset: 0,
             index_count: self.cone_mesh.len(),
-            instance_count: aux.sphere_count() as u32,
+            instance_count: limits.sphere_count() as u32,
         };
 
         unsafe {
@@ -372,16 +396,15 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for RTSHSphere<B>
 
             let instance_slice = unsafe { instance_write.slice() };
 
-            for (instance, sphere) in instance_slice
-                .iter_mut()
-                .zip(aux.get_current_frame().get_spheres())
-            {
+            let query = <Read<Sphere>>::query();
+
+            for (instance, sphere) in instance_slice.iter_mut().zip(query.iter_immutable(aux)) {
                 *instance = Instance::new(
-                    aux.get_camera().get_view_matrix(),
-                    aux.get_camera().get_proj_matrix(),
-                    aux.get_light().get_position(),
-                    sphere.get_position(),
-                    sphere.get_radius(),
+                    camera.get_view_matrix(),
+                    camera.get_proj_matrix(),
+                    environment.light().get_position(),
+                    sphere.position(),
+                    sphere.radius(),
                 );
             }
         }
@@ -394,7 +417,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for RTSHSphere<B>
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &T,
+        _aux: &World,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -431,5 +454,5 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for RTSHSphere<B>
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &T) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
 }

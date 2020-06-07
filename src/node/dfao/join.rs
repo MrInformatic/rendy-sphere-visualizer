@@ -4,7 +4,8 @@ use crate::ext::{
 };
 use crate::mem::{element, CombinedBufferCalculator};
 use crate::node::dfao::DFAOParams;
-use crate::scene::SceneView;
+//use crate::scene::SceneView;
+use legion::world::World;
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
 use rendy::factory::Factory;
 use rendy::graph::render::{Layout, SetLayout, SimpleGraphicsPipeline, SimpleGraphicsPipelineDesc};
@@ -64,7 +65,7 @@ impl DFAOJoinDesc {
     }
 }
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOJoinDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOJoinDesc {
     type Pipeline = DFAOJoin<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -137,7 +138,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOJoinD
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &T) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("failed to compile shader set")
@@ -148,7 +149,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOJoinD
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        _aux: &T,
+        _aux: &World,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -279,7 +280,7 @@ pub struct DFAOJoin<B: Backend> {
     fullscreen_triangle: Mesh<B>,
 }
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOJoin<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOJoin<B> {
     type Desc = DFAOJoinDesc;
 
     fn draw(
@@ -287,7 +288,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOJoin<B> {
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         _index: usize,
-        _aux: &T,
+        _aux: &World,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(layout, 0, Some(self.uniform_set.raw()), None);
@@ -309,5 +310,5 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOJoin<B> {
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &T) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
 }

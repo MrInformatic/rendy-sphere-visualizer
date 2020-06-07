@@ -22,6 +22,7 @@ use rendy::resource::{
 };
 use serde::export::PhantomData;
 
+use legion::world::World;
 use std::fmt::Debug;
 
 #[derive(Debug)]
@@ -45,10 +46,9 @@ impl<
 
 impl<
         B: Backend,
-        T,
         A: 'static + CaptureAction<D> + Debug + Send + Sync,
         D: 'static + Copy + Debug + Send + Sync,
-    > NodeDesc<B, T> for CaptureDesc<A, D>
+    > NodeDesc<B, World> for CaptureDesc<A, D>
 {
     type Node = Capture<B, A, D>;
 
@@ -67,7 +67,7 @@ impl<
         factory: &mut Factory<B>,
         family: &mut Family<B, QueueType>,
         _queue: usize,
-        _aux: &T,
+        _aux: &World,
         buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
     ) -> Result<Self::Node, NodeBuildError> {
@@ -250,6 +250,7 @@ impl<B: Backend> PerFrame<B> {
 
     fn save<D: Copy, A: CaptureAction<D>>(
         &mut self,
+        world: &World,
         factory: &Factory<B>,
         action: &mut A,
     ) -> Result<(), Error> {
@@ -267,7 +268,7 @@ impl<B: Backend> PerFrame<B> {
 
             let data = unsafe { mapping.read(factory, range)? };
 
-            action.exec(data, frame.clone())?;
+            action.exec(world, data, frame.clone())?;
 
             block.unmap(factory)
         }
@@ -297,10 +298,9 @@ impl<'a, B: Backend, F, T> NodeSubmittable<'a, B> for Capture<B, F, T> {
 
 impl<
         B: Backend,
-        T: ?Sized,
         A: 'static + CaptureAction<D> + Debug + Send + Sync,
         D: 'static + Copy + Debug + Send + Sync,
-    > Node<B, T> for Capture<B, A, D>
+    > Node<B, World> for Capture<B, A, D>
 {
     type Capability = Transfer;
 
@@ -308,7 +308,7 @@ impl<
         &'a mut self,
         ctx: &GraphContext<B>,
         factory: &Factory<B>,
-        _aux: &T,
+        aux: &World,
         frames: &'a Frames<B>,
     ) -> <Self as NodeSubmittable<'a, B>>::Submittables {
         let Capture {
@@ -321,14 +321,14 @@ impl<
         let for_frame = &mut per_frame[index as usize];
 
         for_frame
-            .save(factory, action)
+            .save(aux, factory, action)
             .expect("could not save frame");
         for_frame.set_dirty(frame);
 
         Some(&for_frame.submit)
     }
 
-    unsafe fn dispose(self, factory: &mut Factory<B>, _aux: &T) {
+    unsafe fn dispose(self, factory: &mut Factory<B>, aux: &World) {
         let Capture {
             mut per_frame,
             mut action,
@@ -338,7 +338,7 @@ impl<
 
         for for_frame in &mut per_frame {
             for_frame
-                .save(factory, &mut action)
+                .save(aux, factory, &mut action)
                 .expect("could not save frame")
         }
 
@@ -353,5 +353,5 @@ impl<
 }
 
 pub trait CaptureAction<D> {
-    fn exec(&mut self, image_data: &[D], frame: u64) -> Result<(), Error>;
+    fn exec(&mut self, world: &World, image_data: &[D], frame: u64) -> Result<(), Error>;
 }
