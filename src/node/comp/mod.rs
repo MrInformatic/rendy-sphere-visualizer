@@ -1,7 +1,7 @@
 use crate::ext::{create_fullscreen_triangle, transform_point, Std140, FULLSCREEN_SAMPLER_DESC};
 use crate::ext::{GraphContextExt, SAMPLED_IMAGE_IMAGE_ACCESS};
 use crate::mem::{element, CombinedBufferCalculator};
-use crate::scene::SceneView;
+//use crate::scene::SceneView;
 
 use nalgebra_glm::{inverse, Mat4, Vec3};
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
@@ -30,6 +30,9 @@ use rendy::resource::{
 };
 use rendy::shader::{ShaderSet, SpirvShader};
 
+use crate::scene::camera::Camera;
+use crate::scene::environment::Environment;
+use legion::world::World;
 use std::mem::size_of;
 
 #[repr(C)]
@@ -62,7 +65,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub struct CompDesc;
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for CompDesc {
     type Pipeline = Comp<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -183,7 +186,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &T) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("could not compile shader set")
@@ -194,7 +197,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for CompDesc 
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        _aux: &T,
+        _aux: &World,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -385,7 +388,7 @@ pub struct Comp<B: Backend> {
     sampler: Escape<Sampler<B>>,
 }
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for Comp<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, World> for Comp<B> {
     type Desc = CompDesc;
 
     fn prepare(
@@ -394,17 +397,27 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for Comp<B> {
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &T,
+        aux: &World,
     ) -> PrepareResult {
+        let environment = aux
+            .resources
+            .get::<Environment<B>>()
+            .expect("environment was not inserted into world");
+
+        let camera = aux
+            .resources
+            .get::<Camera>()
+            .expect("camera was not inserted into world");
+
         let args = Args {
-            ambient: aux.get_ambient_light().clone().into(),
-            light_color: aux.get_light().get_color().clone().into(),
+            ambient: environment.ambient_light().clone().into(),
+            light_color: environment.light().get_color().clone().into(),
             light_position: transform_point(
-                aux.get_light().get_position(),
-                aux.get_camera().get_view_matrix(),
+                environment.light().get_position(),
+                camera.get_view_matrix(),
             )
             .into(),
-            inversed_view_matrix: inverse(aux.get_camera().get_view_matrix()).into(),
+            inversed_view_matrix: inverse(camera.get_view_matrix()).into(),
         };
 
         unsafe {
@@ -421,9 +434,9 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for Comp<B> {
                 binding: 0,
                 array_offset: 0,
                 descriptors: Some(Descriptor::CombinedImageSampler(
-                    aux.environment_map().view().raw(),
+                    environment.environment_map().view().raw(),
                     ILayout::ShaderReadOnlyOptimal,
-                    aux.environment_map().sampler().raw(),
+                    environment.environment_map().sampler().raw(),
                 )),
             }));
         }
@@ -436,7 +449,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for Comp<B> {
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &T,
+        _aux: &World,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -463,5 +476,5 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for Comp<B> {
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &T) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
 }

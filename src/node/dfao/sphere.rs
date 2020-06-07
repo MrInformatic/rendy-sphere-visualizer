@@ -4,8 +4,13 @@ use crate::ext::{
 };
 use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::node::dfao::DFAOParams;
-use crate::scene::SceneView;
+//use crate::scene::SceneView;
+use crate::scene::camera::Camera;
+use crate::scene::limits::Limits;
+use crate::scene::sphere::Sphere;
 use genmesh::generators::Cube;
+use legion::query::{IntoQuery, Read};
+use legion::world::World;
 use nalgebra_glm::{Mat4, Vec3};
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
 use rendy::factory::Factory;
@@ -84,7 +89,7 @@ impl DFAOSphereDesc {
     }
 }
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOSphereDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
     type Pipeline = DFAOSphere<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -166,7 +171,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOSpher
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &T) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("failed to compile shader set")
@@ -177,7 +182,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOSpher
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        aux: &T,
+        aux: &World,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -201,7 +206,12 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipelineDesc<B, T> for DFAOSpher
             .limits()
             .min_uniform_buffer_offset_alignment;
 
-        let sphere_count = aux.sphere_count();
+        let limits = aux
+            .resources
+            .get::<Limits>()
+            .expect("limits was not inserted into world");
+
+        let sphere_count = limits.sphere_count();
 
         let uniform_indirect_instance_calculator = CombinedBufferCalculator::new(
             vec![
@@ -302,7 +312,7 @@ pub struct DFAOSphere<B: Backend> {
     params: DFAOParams,
 }
 
-impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOSphere<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
     type Desc = DFAOSphereDesc;
 
     fn prepare(
@@ -311,11 +321,21 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOSphere<B>
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &T,
+        aux: &World,
     ) -> PrepareResult {
+        let camera = aux
+            .resources
+            .get::<Camera>()
+            .expect("camera was not inserted into world");
+
+        let limits = aux
+            .resources
+            .get::<Limits>()
+            .expect("limits was not inserted into world");
+
         let args = Args {
             offset: self.params.offset.into(),
-            projection_matrix: aux.get_camera().get_proj_matrix().clone().into(),
+            projection_matrix: camera.get_proj_matrix().clone().into(),
         };
 
         unsafe {
@@ -333,7 +353,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOSphere<B>
             first_instance: 0,
             vertex_offset: 0,
             index_count: self.cube_mesh.len(),
-            instance_count: aux.sphere_count() as u32,
+            instance_count: limits.sphere_count() as u32,
         };
 
         unsafe {
@@ -366,16 +386,12 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOSphere<B>
 
             let instance_slice = unsafe { instance_write.slice() };
 
-            for (instance, sphere) in instance_slice
-                .iter_mut()
-                .zip(aux.get_current_frame().get_spheres())
-            {
+            let query = <Read<Sphere>>::query();
+
+            for (instance, sphere) in instance_slice.iter_mut().zip(query.iter_immutable(aux)) {
                 *instance = Instance {
-                    center: transform_point(
-                        sphere.get_position(),
-                        aux.get_camera().get_view_matrix(),
-                    ),
-                    radius: sphere.get_radius(),
+                    center: transform_point(sphere.position(), camera.get_view_matrix()),
+                    radius: sphere.radius(),
                 }
             }
         }
@@ -388,7 +404,7 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOSphere<B>
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &T,
+        _aux: &World,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -425,5 +441,5 @@ impl<B: Backend, T: SceneView<B>> SimpleGraphicsPipeline<B, T> for DFAOSphere<B>
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &T) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
 }
