@@ -75,12 +75,10 @@ pub fn camera_resize_system(world: &World) -> Box<dyn Schedulable> {
 
     SystemBuilder::new("camera_resize_system")
         .read_resource::<Resolution>()
-        .with_query(<Write<Camera>>::query())
-        .build(move |_, world, resolution, query| {
-            query.iter(world).for_each(|mut camera| {
-                if resolution.changed().has_changed(&mut state_id) {
-                    camera.resize(resolution.width(), resolution.height())
-                }
-            })
+        .write_resource::<Camera>()
+        .build(move |_, _, (resolution, camera), ()| {
+            if resolution.changed().has_changed(&mut state_id) {
+                camera.resize(resolution.width(), resolution.height())
+            }
         })
 }
