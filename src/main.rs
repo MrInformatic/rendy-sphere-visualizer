@@ -33,30 +33,35 @@ use rendy::init::winit::window::Window;
 use rendy::resource::Tiling;
 
 use crate::animation::Frame;
-use crate::scene::camera::{camera_resize_system, Camera};
+use crate::application::application_bundle;
+use crate::bundle::{Bundle, BundleGroup, BundlePhase1};
+use crate::scene::camera::{camera_resize_system, Camera, CameraBundle};
 use crate::scene::color_ramp::ColorRamp;
-use crate::scene::environment::Environment;
+use crate::scene::environment::{Environment, EnvironmentBundle};
 use crate::scene::light::Light;
 use crate::scene::limits::Limits;
 use crate::scene::resolution::Resolution;
 use crate::scene::sphere::{
-    load_spheres, sphere_animation_system_headless, sphere_animation_system_realtime,
+    sphere_animation_system_headless, sphere_animation_system_realtime, SphereBundle,
 };
 use crate::scene::time::HeadlessTime;
 use clap::{App, Arg};
 use image::ColorType;
-use legion::schedule::Schedule;
+use legion::schedule::{Builder, Schedule};
 use legion::world::{Universe, World};
 use rendy::wsi::Surface;
 use std::path::PathBuf;
 
 pub mod animation;
+pub mod application;
+pub mod bundle;
 pub mod cubemap;
 pub mod event;
 pub mod ext;
 pub mod graph;
 pub mod mem;
 pub mod node;
+pub mod physics;
 pub mod scene;
 
 lazy_static! {
@@ -70,14 +75,6 @@ fn render<B: Backend>(
     families: Families<B>,
 ) -> Result<(), Error> {
     let resolution = Resolution::new(3840, 2160);
-
-    let headless_time = HeadlessTime::new(Frame::new(0.0));
-
-    let graphics_family = families
-        .with_capability::<Graphics>()
-        .ok_or(anyhow!("this GRAPHICS CARD do not support GRAPHICS"))?;
-
-    let graphics_queue = families.family(graphics_family).queue(0).id();
 
     let gpu_format = choose_format(
         &factory,
@@ -95,12 +92,11 @@ fn render<B: Backend>(
 
     println!("gpu format: {:?}, cpu format: {:?}", gpu_format, cpu_format);
 
-    world.resources.insert(resolution);
-    world.resources.insert(factory);
-    world.resources.insert(families);
-    world.resources.insert(headless_time);
+    let bundle = application_bundle::<B>(factory, families, resolution, None, Mode::Headless)?;
 
-    init_world::<B>(&mut world, graphics_queue)?;
+    let mut schedule = bundle
+        .add_entities_and_resources(&mut world)?
+        .build_schedule(&world)?;
 
     let graph_creator = SphereVisualizerGraphCreator::<B, _>::new(
         &world,
@@ -108,11 +104,6 @@ fn render<B: Backend>(
     );
 
     let mut rendering_system = RenderingSystem::new(graph_creator, &mut world)?;
-
-    let mut schedule = Schedule::builder()
-        .add_system(sphere_animation_system_headless())
-        .add_system(camera_resize_system(&world))
-        .build();
 
     let frame_count = {
         world
@@ -153,23 +144,12 @@ fn init<B: Backend, T: 'static>(
 
     let resolution = Resolution::from_physical_size(window.inner_size());
 
-    let graphics_family = families
-        .with_capability::<Graphics>()
-        .ok_or(anyhow!("this GRAPHICS CARD do not support GRAPHICS"))?;
+    let bundle =
+        application_bundle::<B>(factory, families, resolution, Some(window), Mode::Realtime)?;
 
-    let graphics_queue = families.family(graphics_family).queue(0).id();
-
-    world.resources.insert(resolution);
-    world.resources.insert(window);
-    world.resources.insert(factory);
-    world.resources.insert(families);
-
-    init_world::<B>(&mut world, graphics_queue)?;
-
-    let mut schedule = Schedule::builder()
-        .add_system(sphere_animation_system_realtime())
-        .add_system(camera_resize_system(&world))
-        .build();
+    let mut schedule = bundle
+        .add_entities_and_resources(&mut world)?
+        .build_schedule(&world)?;
 
     let graph_creator =
         SphereVisualizerGraphCreator::<B, _>::new(&world, SurfaceOutput::new(Some(surface)));
@@ -211,75 +191,6 @@ fn init<B: Backend, T: 'static>(
         }
         _ => (),
     });
-}
-
-fn init_world<B: Backend>(world: &mut World, queue: QueueId) -> Result<(), Error> {
-    let camera = {
-        let resolution = world
-            .resources
-            .get::<Resolution>()
-            .expect("Resolution was not inserted into world");
-
-        let camera_transform = translate(&identity(), &vec3(0.0, 0.0, -10.0));
-
-        Camera::new(
-            camera_transform,
-            pi::<f32>() / 2.0,
-            0.1,
-            1000.0,
-            resolution.width(),
-            resolution.height(),
-        )
-    };
-
-    world.resources.insert(camera);
-
-    let mut factory = world
-        .resources
-        .get_mut::<Factory<B>>()
-        .expect("factory was not inserted into world");
-
-    let light = Light::new(vec3(-10.0, 10.0, 10.0), vec3(400.0, 400.0, 400.0));
-
-    let ambient_light = vec3(1.0, 1.0, 1.0f32);
-
-    let environment_map = {
-        let state = ImageState {
-            queue: queue,
-            stage: PipelineStage::FRAGMENT_SHADER,
-            access: IAccess::SHADER_READ,
-            layout: ILayout::ShaderReadOnlyOptimal,
-        };
-
-        HdrCubeMapBuilder::new()
-            .with_side(ENVIRONMENT_MAP_PATH.join("0001.hdr"), CubeFace::PosX)?
-            .with_side(ENVIRONMENT_MAP_PATH.join("0002.hdr"), CubeFace::NegX)?
-            .with_side(ENVIRONMENT_MAP_PATH.join("0003.hdr"), CubeFace::PosY)?
-            .with_side(ENVIRONMENT_MAP_PATH.join("0004.hdr"), CubeFace::NegY)?
-            .with_side(ENVIRONMENT_MAP_PATH.join("0005.hdr"), CubeFace::PosZ)?
-            .with_side(ENVIRONMENT_MAP_PATH.join("0006.hdr"), CubeFace::NegZ)?
-            .with_sampler_info(CUBEMAP_SAMPLER_DESC)
-            .build(state, &mut factory)?
-    };
-
-    let environment = Environment::new(ambient_light, light, environment_map);
-
-    world.resources.insert(environment);
-
-    let color_ramp = ColorRamp::new(vec![
-        vec3(0.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 0.0),
-        vec3(0.5, 0.0, 1.0),
-        vec3(0.0, 0.0, 1.0),
-        vec3(0.0, 0.5, 1.0),
-        vec3(0.0, 0.1, 1.0),
-    ]);
-
-    world.resources.insert(color_ramp);
-
-    load_spheres(world, "assets/scenes/out2.json")?;
-
-    Ok(())
 }
 
 #[cfg(any(feature = "dx12", feature = "metal", feature = "vulkan"))]
@@ -349,4 +260,9 @@ pub fn application_root_dir() -> PathBuf {
                 .into()
         }
     }
+}
+
+pub enum Mode {
+    Realtime,
+    Headless,
 }

@@ -1,9 +1,65 @@
+use crate::bundle::{Bundle, BundlePhase1};
 use crate::scene::resolution::Resolution;
+use anyhow::Error;
 use legion::query::{IntoQuery, Write};
-use legion::schedule::Schedulable;
+use legion::schedule::{Builder, Schedulable};
 use legion::system::SystemBuilder;
 use legion::world::World;
 use nalgebra_glm::{diagonal4x4, vec4, zero, Mat4};
+
+pub struct CameraBundle {
+    view_matrix: Mat4,
+    fov: f32,
+    near: f32,
+    far: f32,
+}
+
+impl CameraBundle {
+    pub fn new(view_matrix: Mat4, fov: f32, near: f32, far: f32) -> Self {
+        Self {
+            view_matrix,
+            fov,
+            near,
+            far,
+        }
+    }
+}
+
+impl Bundle for CameraBundle {
+    type Phase1 = CameraBundlePhase1;
+
+    fn add_entities_and_resources(mut self, world: &mut World) -> Result<Self::Phase1, Error> {
+        let CameraBundle {
+            view_matrix,
+            fov,
+            near,
+            far,
+        } = self;
+
+        let resolution = world
+            .resources
+            .get::<Resolution>()
+            .expect("Resolution was not inserted into world");
+
+        world.resources.insert(Camera::new(
+            view_matrix,
+            fov,
+            near,
+            far,
+            resolution.width(),
+            resolution.height(),
+        ));
+        Ok(CameraBundlePhase1)
+    }
+}
+
+pub struct CameraBundlePhase1;
+
+impl BundlePhase1 for CameraBundlePhase1 {
+    fn add_systems(self, world: &World, builder: Builder) -> Result<Builder, Error> {
+        Ok(builder.add_system(camera_resize_system(world)))
+    }
+}
 
 pub struct Camera {
     view_matrix: Mat4,
