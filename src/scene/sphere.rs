@@ -1,56 +1,100 @@
-use crate::animation::{Animation, LerpFactorGenerator, LoopEmpty, Property, State};
+use crate::animation::{Animation, Frame, LerpFactorGenerator, LoopEmpty, Property, State};
+use crate::bundle::{Bundle, BundlePhase1};
 use crate::scene::data::SphereData;
 use crate::scene::limits::Limits;
 use crate::scene::time::{HeadlessTime, Time};
+use crate::Mode;
 use anyhow::Error;
 use legion::query::{IntoQuery, Read, Write};
-use legion::schedule::Schedulable;
+use legion::schedule::{Builder, Schedulable};
 use legion::system::SystemBuilder;
 use legion::world::World;
 use nalgebra_glm::Vec3;
+use serde::export::PhantomData;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-pub fn load_spheres<P: AsRef<Path>>(world: &mut World, path: P) -> Result<(), Error> {
-    let time = Time::new(60.0);
+pub struct SphereBundle<P> {
+    path: P,
+    mode: Mode,
+}
 
-    world.resources.insert(time);
+impl<P: AsRef<Path>> SphereBundle<P> {
+    pub fn new(path: P, mode: Mode) -> Self {
+        Self { path, mode }
+    }
+}
 
-    let data: Vec<Vec<SphereData>> = serde_json::from_reader(BufReader::new(File::open(path)?))?;
+impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
+    type Phase1 = SphereBundlePhase1;
 
-    let sphere_count = data.iter().map(|i| i.len()).max().unwrap();
+    fn add_entities_and_resources(mut self, world: &mut World) -> Result<Self::Phase1, Error> {
+        let SphereBundle { path, mode } = self;
 
-    let limits = Limits::new(sphere_count, data.len());
+        match &mode {
+            Mode::Realtime => {
+                let time = Time::new(60.0);
 
-    let mut transposed_data: Vec<Vec<SphereData>> = vec![];
+                world.resources.insert(time);
+            }
+            Mode::Headless => {
+                let time = HeadlessTime::new(Frame::new(0.0));
 
-    for data in data.into_iter() {
-        for (sphere_index, sphere) in data.into_iter().enumerate() {
-            match transposed_data.get_mut(sphere_index) {
-                Some(data) => data.push(sphere),
-                None => transposed_data.push(vec![sphere]),
+                world.resources.insert(time);
             }
         }
+
+        let data: Vec<Vec<SphereData>> =
+            serde_json::from_reader(BufReader::new(File::open(path.as_ref())?))?;
+
+        let sphere_count = data.iter().map(|i| i.len()).max().unwrap();
+
+        let limits = Limits::new(sphere_count, data.len());
+
+        let mut transposed_data: Vec<Vec<SphereData>> = vec![];
+
+        for data in data.into_iter() {
+            for (sphere_index, sphere) in data.into_iter().enumerate() {
+                match transposed_data.get_mut(sphere_index) {
+                    Some(data) => data.push(sphere),
+                    None => transposed_data.push(vec![sphere]),
+                }
+            }
+        }
+
+        world.resources.insert(limits);
+        world.insert(
+            (),
+            transposed_data.into_iter().map(|data| {
+                let sphere = Sphere::from_sphere_data(&data[0]);
+                let sphere_states = data
+                    .into_iter()
+                    .map(|sphere_data| SphereState::from_sphere_data(&sphere_data))
+                    .collect::<Vec<_>>();
+
+                let animation =
+                    Animation::without_times(sphere_states, LoopEmpty, LerpFactorGenerator);
+
+                (sphere, animation)
+            }),
+        );
+
+        Ok(SphereBundlePhase1 { mode })
     }
+}
 
-    world.resources.insert(limits);
-    world.insert(
-        (),
-        transposed_data.into_iter().map(|data| {
-            let sphere = Sphere::from_sphere_data(&data[0]);
-            let sphere_states = data
-                .into_iter()
-                .map(|sphere_data| SphereState::from_sphere_data(&sphere_data))
-                .collect::<Vec<_>>();
+pub struct SphereBundlePhase1 {
+    mode: Mode,
+}
 
-            let animation = Animation::without_times(sphere_states, LoopEmpty, LerpFactorGenerator);
-
-            (sphere, animation)
-        }),
-    );
-
-    Ok(())
+impl BundlePhase1 for SphereBundlePhase1 {
+    fn add_systems(self, _world: &World, builder: Builder) -> Result<Builder, Error> {
+        Ok(builder.add_system(match self.mode {
+            Mode::Realtime => sphere_animation_system_realtime(),
+            Mode::Headless => sphere_animation_system_headless(),
+        }))
+    }
 }
 
 pub struct Sphere {
