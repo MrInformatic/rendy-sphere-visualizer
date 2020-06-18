@@ -42,7 +42,7 @@ use crate::scene::light::Light;
 use crate::scene::limits::Limits;
 use crate::scene::resolution::Resolution;
 use crate::scene::sphere::{
-    sphere_animation_system_headless, sphere_animation_system_realtime, SphereBundle,
+    sphere_animation_system_headless, sphere_animation_system_realtime, LoadMode, SphereBundle,
 };
 use crate::scene::time::HeadlessTime;
 use clap::{App, Arg};
@@ -92,7 +92,14 @@ fn render<B: Backend>(
 
     println!("gpu format: {:?}, cpu format: {:?}", gpu_format, cpu_format);
 
-    let bundle = application_bundle::<B>(factory, families, resolution, None, Mode::Headless)?;
+    let bundle = application_bundle::<B>(
+        factory,
+        families,
+        resolution,
+        None,
+        Mode::Headless,
+        LoadMode::Radius,
+    )?;
 
     let mut schedule = bundle
         .add_entities_and_resources(&mut world)?
@@ -144,8 +151,14 @@ fn init<B: Backend, T: 'static>(
 
     let resolution = Resolution::from_physical_size(window.inner_size());
 
-    let bundle =
-        application_bundle::<B>(factory, families, resolution, Some(window), Mode::Realtime)?;
+    let bundle = application_bundle::<B>(
+        factory,
+        families,
+        resolution,
+        Some(window),
+        Mode::Realtime,
+        LoadMode::Radius,
+    )?;
 
     let mut schedule = bundle
         .add_entities_and_resources(&mut world)?

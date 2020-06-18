@@ -1,10 +1,11 @@
 use crate::bundle::{Bundle, BundleGroup};
+use crate::physics::PhysicsBundle;
 use crate::scene::camera::CameraBundle;
 use crate::scene::color_ramp::ColorRamp;
 use crate::scene::environment::EnvironmentBundle;
 use crate::scene::light::Light;
 use crate::scene::resolution::Resolution;
-use crate::scene::sphere::SphereBundle;
+use crate::scene::sphere::{LoadMode, SphereBundle};
 use crate::Mode;
 use crate::ENVIRONMENT_MAP_PATH;
 use anyhow::Error;
@@ -21,6 +22,7 @@ pub fn application_bundle<B: Backend>(
     resolution: Resolution,
     window: Option<Window>,
     mode: Mode,
+    load_mode: LoadMode,
 ) -> Result<impl Bundle, Error> {
     let graphics_family = families
         .with_capability::<Graphics>()
@@ -68,7 +70,18 @@ pub fn application_bundle<B: Backend>(
 
     application_bundle.add_resource(color_ramp);
 
-    application_bundle.add_bundle(SphereBundle::new("assets/scenes/out2.json", mode));
+    match &load_mode {
+        LoadMode::Radius => {
+            application_bundle.add_bundle(PhysicsBundle::new(vec3(0.0, 0.0, 0.0)));
+        }
+        _ => {}
+    }
+
+    application_bundle.add_bundle(SphereBundle::new(
+        "assets/scenes/out2.json",
+        mode,
+        load_mode,
+    ));
 
     Ok(application_bundle)
 }

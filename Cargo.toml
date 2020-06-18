@@ -27,10 +27,10 @@ futures = { version = "0.3.5", features = ["thread-pool"] }
 legion = "0.2.1"
 ncollide3d = "0.23.1"
 nphysics3d = "0.16.0"
+rand = "0.7.3"
 
 [dev-dependencies]
 assert_approx_eq = "1.1.0"
-rand = "0.7.3"
 
 [profile.release]
 debug = true

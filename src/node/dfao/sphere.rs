@@ -7,7 +7,7 @@ use crate::node::dfao::DFAOParams;
 //use crate::scene::SceneView;
 use crate::scene::camera::Camera;
 use crate::scene::limits::Limits;
-use crate::scene::sphere::Sphere;
+use crate::scene::sphere::{PositionComponent, Sphere};
 use genmesh::generators::Cube;
 use legion::query::{IntoQuery, Read};
 use legion::world::World;
@@ -386,11 +386,13 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
 
             let instance_slice = unsafe { instance_write.slice() };
 
-            let query = <Read<Sphere>>::query();
+            let query = <(Read<Sphere>, Read<PositionComponent>)>::query();
 
-            for (instance, sphere) in instance_slice.iter_mut().zip(query.iter_immutable(aux)) {
+            for (instance, (sphere, position)) in
+                instance_slice.iter_mut().zip(query.iter_immutable(aux))
+            {
                 *instance = Instance {
-                    center: transform_point(sphere.position(), camera.get_view_matrix()),
+                    center: transform_point(&position.0, camera.get_view_matrix()),
                     radius: sphere.radius(),
                 }
             }

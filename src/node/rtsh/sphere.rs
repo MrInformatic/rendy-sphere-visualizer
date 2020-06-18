@@ -6,7 +6,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::scene::camera::Camera;
 use crate::scene::environment::Environment;
 use crate::scene::limits::Limits;
-use crate::scene::sphere::Sphere;
+use crate::scene::sphere::{PositionComponent, Sphere};
 use legion::query::{IntoQuery, Read};
 use legion::world::World;
 use nalgebra_glm::{
@@ -396,14 +396,16 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
 
             let instance_slice = unsafe { instance_write.slice() };
 
-            let query = <Read<Sphere>>::query();
+            let query = <(Read<Sphere>, Read<PositionComponent>)>::query();
 
-            for (instance, sphere) in instance_slice.iter_mut().zip(query.iter_immutable(aux)) {
+            for (instance, (sphere, position)) in
+                instance_slice.iter_mut().zip(query.iter_immutable(aux))
+            {
                 *instance = Instance::new(
                     camera.get_view_matrix(),
                     camera.get_proj_matrix(),
                     environment.light().get_position(),
-                    sphere.position(),
+                    &position.0,
                     sphere.radius(),
                 );
             }
