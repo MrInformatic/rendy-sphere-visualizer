@@ -1,26 +1,35 @@
 use crate::bundle::{Bundle, BundlePhase1};
+use crate::scene::sphere::PositionComponent;
 use anyhow::Error;
+use legion::query::{IntoQuery, Read, Write};
 use legion::schedule::{Builder, Schedulable};
 use legion::system::SystemBuilder;
 use legion::world::World;
-use nalgebra::Vector3;
+use nalgebra::{Vector3, RealField};
 use nalgebra_glm::{vec3, Vec3};
-use nphysics3d::force_generator::DefaultForceGeneratorSet;
-use nphysics3d::joint::DefaultJointConstraintSet;
-use nphysics3d::object::{DefaultBodySet, DefaultColliderSet};
+use nphysics3d::force_generator::{DefaultForceGeneratorSet, DefaultForceGeneratorHandle};
+use nphysics3d::joint::{DefaultJointConstraintSet, DefaultJointConstraintHandle};
+use nphysics3d::object::{DefaultBodyPartHandle, DefaultBodySet, DefaultColliderSet, BodyHandle, BodyPartHandle, ColliderHandle, DefaultBodyHandle, DefaultColliderHandle};
 use nphysics3d::world::{DefaultGeometricalWorld, DefaultMechanicalWorld, MechanicalWorld};
 use std::borrow::BorrowMut;
 use std::ops::DerefMut;
+use nphysics3d::material::MaterialHandle;
 
 pub struct PhysicsBundle {
     gravity: Vec3,
+}
+
+impl PhysicsBundle {
+    pub fn new(gravity: Vec3) -> Self {
+        PhysicsBundle { gravity }
+    }
 }
 
 impl Bundle for PhysicsBundle {
     type Phase1 = PhysicsBundlePhase1;
 
     fn add_entities_and_resources(mut self, world: &mut World) -> Result<Self::Phase1, Error> {
-        let mechanical_world = DefaultMechanicalWorld::<f32>::new(vec3(0.0f32, 0.0, 0.0));
+        let mechanical_world = DefaultMechanicalWorld::<f32>::new(self.gravity);
         let geometrical_world = DefaultGeometricalWorld::<f32>::new();
 
         let bodies = DefaultBodySet::<f32>::new();
@@ -55,9 +64,10 @@ pub fn physics_system() -> Box<dyn Schedulable> {
         .write_resource::<DefaultColliderSet<f32>>()
         .write_resource::<DefaultJointConstraintSet<f32>>()
         .write_resource::<DefaultForceGeneratorSet<f32>>()
+        .with_query(<(Read<DefaultBodyPartHandleComponent>, Write<PositionComponent>)>::query())
         .build(
             |_,
-             _,
+             world,
              (
                 mechanical_world,
                 geometrical_world,
@@ -66,7 +76,7 @@ pub fn physics_system() -> Box<dyn Schedulable> {
                 joint_constraints,
                 force_generators,
             ),
-             _| {
+             query| {
                 MechanicalWorld::step(
                     mechanical_world.deref_mut(),
                     geometrical_world.deref_mut(),
@@ -75,6 +85,29 @@ pub fn physics_system() -> Box<dyn Schedulable> {
                     joint_constraints.deref_mut(),
                     force_generators.deref_mut(),
                 );
+
+                query
+                    .iter(world)
+                    .for_each(|(body_part_handle, mut position_component)| {
+                        let body_part_handle = body_part_handle.0;
+                        if let Some(body) = bodies.get(body_part_handle.0) {
+                            if let Some(part) = body.part(body_part_handle.1) {
+                                let position = part.position();
+
+                                position_component.0 = position.translation.vector.clone();
+                            }
+                        }
+                    })
             },
         )
 }
+
+pub struct BodyHandleComponent<H: BodyHandle>(pub H);
+pub struct BodyPartHandleComponent<H: BodyHandle>(pub BodyPartHandle<H>);
+pub struct ColliderHandleComponent<H: ColliderHandle>(pub H);
+pub struct MaterialHandleComponent<N: RealField>(pub MaterialHandle<N>);
+pub type DefaultBodyHandleComponent = BodyHandleComponent<DefaultBodyHandle>;
+pub type DefaultBodyPartHandleComponent = BodyPartHandleComponent<DefaultBodyHandle>;
+pub type DefaultColliderHandleComponent = ColliderHandleComponent<DefaultColliderHandle>;
+pub struct DefaultForceGeneratorHandleComponent(pub DefaultForceGeneratorHandle);
+pub struct DefaultJointConstraintHandleComponent(pub DefaultJointConstraintHandle);

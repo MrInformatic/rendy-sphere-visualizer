@@ -3,7 +3,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::scene::camera::Camera;
 use crate::scene::color_ramp::ColorRamp;
 use crate::scene::limits::Limits;
-use crate::scene::sphere::Sphere;
+use crate::scene::sphere::{PositionComponent, Sphere};
 use genmesh::generators::{IndexedPolygon, SharedVertex, SphereUv};
 use genmesh::EmitTriangles;
 use legion::query::{IntoQuery, Read};
@@ -345,13 +345,15 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
 
             let view = camera.get_view_matrix();
 
-            let query = <Read<Sphere>>::query();
+            let query = <(Read<Sphere>, Read<PositionComponent>)>::query();
 
-            for (instance, sphere) in instance_slice.iter_mut().zip(query.iter_immutable(aux)) {
+            for (instance, (sphere, position)) in
+                instance_slice.iter_mut().zip(query.iter_immutable(aux))
+            {
                 let radius = sphere.radius();
 
                 let model = scale(
-                    &translate(&identity(), sphere.position()),
+                    &translate(&identity(), &position.0),
                     &vec3(radius, radius, radius),
                 );
 
