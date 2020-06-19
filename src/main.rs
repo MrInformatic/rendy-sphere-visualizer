@@ -9,8 +9,6 @@ extern crate anyhow;
 #[macro_use]
 extern crate assert_approx_eq;
 
-use crate::cubemap::HdrCubeMapBuilder;
-use crate::ext::CUBEMAP_SAMPLER_DESC;
 use crate::graph::{
     choose_format, CaptureOutput, RenderingSystem, SavePng, SphereVisualizerGraphCreator,
     SurfaceOutput,
@@ -18,14 +16,11 @@ use crate::graph::{
 
 use anyhow::Error;
 
-use nalgebra_glm::{identity, pi, translate, vec3};
-use rendy::command::{Families, Graphics, QueueId};
-use rendy::factory::{Factory, ImageState};
+use rendy::command::Families;
+use rendy::factory::Factory;
 use rendy::hal::format::Format;
 
 use rendy::hal::format::ImageFeature;
-use rendy::hal::image::{Access as IAccess, CubeFace, Layout as ILayout};
-use rendy::hal::pso::PipelineStage;
 use rendy::hal::Backend;
 use rendy::init::winit::event::{Event, WindowEvent};
 use rendy::init::winit::event_loop::{ControlFlow, EventLoop};
@@ -34,23 +29,17 @@ use rendy::resource::Tiling;
 
 use crate::animation::Frame;
 use crate::application::application_bundle;
-use crate::bundle::{Bundle, BundleGroup, BundlePhase1};
-use crate::scene::camera::{camera_resize_system, Camera, CameraBundle};
-use crate::scene::color_ramp::ColorRamp;
-use crate::scene::environment::{Environment, EnvironmentBundle};
-use crate::scene::light::Light;
+use crate::bundle::{Bundle, BundlePhase1};
 use crate::scene::limits::Limits;
 use crate::scene::resolution::Resolution;
-use crate::scene::sphere::{
-    sphere_animation_system_headless, sphere_animation_system_realtime, LoadMode, SphereBundle,
-};
+use crate::scene::sphere::LoadMode;
 use crate::scene::time::HeadlessTime;
 use clap::{App, Arg};
 use image::ColorType;
-use legion::schedule::{Builder, Schedule};
 use legion::world::{Universe, World};
 use rendy::wsi::Surface;
-use std::path::PathBuf;
+use serde::export::fmt::Debug;
+use std::path::{Path, PathBuf};
 
 pub mod animation;
 pub mod application;
@@ -69,10 +58,12 @@ lazy_static! {
         crate::application_root_dir().join("assets/environment/sides/");
 }
 
-fn render<B: Backend>(
+fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug>(
     mut world: World,
     factory: Factory<B>,
     families: Families<B>,
+    output_directory: P,
+    load_mode: LoadMode,
 ) -> Result<(), Error> {
     let resolution = Resolution::new(3840, 2160);
 
@@ -98,7 +89,7 @@ fn render<B: Backend>(
         resolution,
         None,
         Mode::Headless,
-        LoadMode::Radius,
+        load_mode,
     )?;
 
     let mut schedule = bundle
@@ -107,7 +98,10 @@ fn render<B: Backend>(
 
     let graph_creator = SphereVisualizerGraphCreator::<B, _>::new(
         &world,
-        CaptureOutput::new(|| SavePng::new("output/frames/", cpu_format), gpu_format),
+        CaptureOutput::new(
+            || SavePng::new(output_directory.clone(), cpu_format),
+            gpu_format,
+        ),
     );
 
     let mut rendering_system = RenderingSystem::new(graph_creator, &mut world)?;
@@ -144,6 +138,7 @@ fn init<B: Backend, T: 'static>(
     surface: Surface<B>,
     window: Window,
     event_loop: EventLoop<T>,
+    load_mode: LoadMode,
 ) -> Result<(), Error> {
     unsafe {
         println!("surface format: {:?}", surface.format(factory.physical()));
@@ -157,7 +152,7 @@ fn init<B: Backend, T: 'static>(
         resolution,
         Some(window),
         Mode::Realtime,
-        LoadMode::Radius,
+        load_mode,
     )?;
 
     let mut schedule = bundle
@@ -214,41 +209,54 @@ fn main() -> Result<(), Error> {
 
     let matches = App::new("rendy sphere visualizer")
         .arg(
+            Arg::with_name("pre-calculated-physics")
+                .short('p')
+                .long("pre-calculated-physics")
+                .required(false)
+                .takes_value(false),
+        )
+        .arg(
             Arg::with_name("headless")
                 .short('h')
                 .long("headless")
                 .required(false)
-                .takes_value(false),
+                .value_name("DIRECTORY"),
         )
         .get_matches();
 
-    let headless = matches.is_present("headless");
+    let load_mode = match matches.is_present("pre-calculated-physics") {
+        true => LoadMode::PositionRadius,
+        false => LoadMode::Radius,
+    };
 
     let universe = Universe::new();
 
     let world = universe.create_world();
 
-    if headless {
-        let config: Config = Default::default();
+    match matches.value_of("headless") {
+        Some(output_dir) => {
+            let config: Config = Default::default();
 
-        let rendy = AnyRendy::init_auto(&config).map_err(|e| anyhow!(e))?;
+            let rendy = AnyRendy::init_auto(&config).map_err(|e| anyhow!(e))?;
 
-        with_any_rendy!((rendy) (factory, families) => {
-            render(world, factory, families).expect("could not render")
-        });
-    } else {
-        let config: Config = Default::default();
-        let window_builder = WindowBuilder::new()
-            .with_title("Ball Visualizer")
-            .with_maximized(true);
+            with_any_rendy ! ((rendy) (factory, families) => {
+                render(world, factory, families, output_dir.to_string(), load_mode).expect("could not render")
+            });
+        }
+        None => {
+            let config: Config = Default::default();
+            let window_builder = WindowBuilder::new()
+                .with_title("Ball Visualizer")
+                .with_maximized(true);
 
-        let event_loop = EventLoop::new();
-        let rendy = AnyWindowedRendy::init_auto(&config, window_builder, &event_loop)
-            .map_err(|e| anyhow!(e))?;
+            let event_loop = EventLoop::new();
+            let rendy = AnyWindowedRendy::init_auto(&config, window_builder, &event_loop)
+                .map_err(|e| anyhow!(e))?;
 
-        with_any_windowed_rendy!((rendy) (factory, families, surface, window) => {
-            init(world, factory, families, surface, window, event_loop).expect("failed to open window")
-        });
+            with_any_windowed_rendy!((rendy) (factory, families, surface, window) => {
+                init(world, factory, families, surface, window, event_loop, load_mode).expect("failed to open window")
+            });
+        }
     }
 
     Ok(())

@@ -9,7 +9,6 @@ use crate::scene::sphere::{LoadMode, SphereBundle};
 use crate::Mode;
 use crate::ENVIRONMENT_MAP_PATH;
 use anyhow::Error;
-use legion::world::World;
 use nalgebra_glm::{identity, pi, translate, vec3};
 use rendy::command::{Families, Graphics};
 use rendy::factory::Factory;

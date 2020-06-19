@@ -1,5 +1,9 @@
 use crate::animation::{Animation, Frame, LerpFactorGenerator, LoopEmpty, Property, State};
 use crate::bundle::{Bundle, BundlePhase1};
+use crate::physics::{
+    BodyPartHandleComponent, ColliderHandleComponent, DefaultColliderHandleComponent,
+    DefaultForceGeneratorHandleComponent,
+};
 use crate::scene::data::{PositionData, SphereData};
 use crate::scene::limits::Limits;
 use crate::scene::time::{HeadlessTime, Time};
@@ -7,6 +11,7 @@ use crate::Mode;
 use anyhow::Error;
 use legion::query::{IntoQuery, Read, Write};
 use legion::schedule::{Builder, Schedulable};
+use legion::storage::Component;
 use legion::system::SystemBuilder;
 use legion::world::World;
 use nalgebra::{Isometry3, Translation, UnitQuaternion};
@@ -27,7 +32,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::ops::Deref;
 use std::path::Path;
-use crate::physics::{BodyPartHandleComponent, ColliderHandleComponent, DefaultForceGeneratorHandleComponent, DefaultColliderHandleComponent};
 
 #[derive(Debug)]
 pub enum LoadMode {
@@ -54,7 +58,7 @@ impl<P: AsRef<Path>> SphereBundle<P> {
 impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
     type Phase1 = SphereBundlePhase1;
 
-    fn add_entities_and_resources(mut self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
         let SphereBundle {
             path,
             mode,
@@ -252,10 +256,32 @@ pub struct SphereBundlePhase1 {
 
 impl BundlePhase1 for SphereBundlePhase1 {
     fn add_systems(self, _world: &World, mut builder: Builder) -> Result<Builder, Error> {
-        builder = builder.add_system(match self.mode {
-            Mode::Realtime => sphere_animation_system_realtime(&self.load_mode),
-            Mode::Headless => sphere_animation_system_headless(&self.load_mode),
-        });
+        match (self.mode, &self.load_mode) {
+            (Mode::Realtime, LoadMode::PositionRadius) => {
+                builder =
+                    builder.add_system(sphere_animation_system_realtime::<Sphere, SphereState>());
+                builder = builder.add_system(sphere_animation_system_realtime::<
+                    PositionComponent,
+                    PositionState,
+                >());
+            }
+            (Mode::Realtime, LoadMode::Radius) => {
+                builder =
+                    builder.add_system(sphere_animation_system_realtime::<Sphere, SphereState>());
+            }
+            (Mode::Headless, LoadMode::PositionRadius) => {
+                builder =
+                    builder.add_system(sphere_animation_system_headless::<Sphere, SphereState>());
+                builder = builder.add_system(sphere_animation_system_headless::<
+                    PositionComponent,
+                    PositionState,
+                >());
+            }
+            (Mode::Headless, LoadMode::Radius) => {
+                builder =
+                    builder.add_system(sphere_animation_system_headless::<Sphere, SphereState>());
+            }
+        };
 
         if let Some(sphere_shape_system) = sphere_shape_system(&self.load_mode) {
             builder = builder.add_system(sphere_shape_system);
@@ -337,107 +363,55 @@ impl State for PositionState {
     }
 }
 
-pub fn sphere_animation_system_realtime(load_mode: &LoadMode) -> Box<dyn Schedulable> {
-    match load_mode {
-        LoadMode::PositionRadius => SystemBuilder::new("sphere_animation_system")
-            .with_query(<(
-                Write<Sphere>,
-                Read<Animation<SphereState, LoopEmpty, LerpFactorGenerator>>,
-            )>::query())
-            .with_query(<(
-                Write<PositionComponent>,
-                Read<Animation<PositionState, LoopEmpty, LerpFactorGenerator>>,
-            )>::query())
-            .read_resource::<Time>()
-            .build(|_, world, time, (sphere_query, position_query)| {
-                sphere_query
-                    .iter(world)
-                    .for_each(|(mut sphere, animation)| {
-                        sphere.set_property(animation.interpolate(time.current_frame()))
-                    });
-                position_query
-                    .iter(world)
-                    .for_each(|(mut position, animation)| {
-                        position.set_property(animation.interpolate(time.current_frame()))
-                    });
-            }),
-        LoadMode::Radius => SystemBuilder::new("sphere_animation_system")
-            .with_query(<(
-                Write<Sphere>,
-                Read<Animation<SphereState, LoopEmpty, LerpFactorGenerator>>,
-            )>::query())
-            .read_resource::<Time>()
-            .build(|_, world, time, sphere_query| {
-                sphere_query
-                    .iter(world)
-                    .for_each(|(mut sphere, animation)| {
-                        sphere.set_property(animation.interpolate(time.current_frame()))
-                    });
-            }),
-    }
+pub fn sphere_animation_system_realtime<
+    P: Property<S> + Component,
+    S: 'static + State + Send + Sync,
+>() -> Box<dyn Schedulable> {
+    SystemBuilder::new("sphere_animation_system")
+        .with_query(<(
+            Write<P>,
+            Read<Animation<S, LoopEmpty, LerpFactorGenerator>>,
+        )>::query())
+        .read_resource::<Time>()
+        .build(|_, world, time, query| {
+            query.iter(world).for_each(|(mut property, animation)| {
+                property.set_property(animation.interpolate(time.current_frame()))
+            });
+        })
 }
 
-pub fn sphere_animation_system_headless(load_mode: &LoadMode) -> Box<dyn Schedulable> {
-    println!("{:?}", load_mode);
-    match load_mode {
-        LoadMode::PositionRadius => SystemBuilder::new("sphere_animation_system")
-            .with_query(<(
-                Write<Sphere>,
-                Read<Animation<SphereState, LoopEmpty, LerpFactorGenerator>>,
-            )>::query())
-            .with_query(<(
-                Write<PositionComponent>,
-                Read<Animation<PositionState, LoopEmpty, LerpFactorGenerator>>,
-            )>::query())
-            .read_resource::<HeadlessTime>()
-            .build(|_, world, time, (sphere_query, position_query)| {
-                sphere_query
-                    .iter(world)
-                    .for_each(|(mut sphere, animation)| {
-                        sphere.set_property(animation.interpolate(time.current_frame()))
-                    });
-                position_query
-                    .iter(world)
-                    .for_each(|(mut position, animation)| {
-                        position.set_property(animation.interpolate(time.current_frame()))
-                    });
-            }),
-        LoadMode::Radius => SystemBuilder::new("sphere_animation_system")
-            .with_query(<(
-                Write<Sphere>,
-                Read<Animation<SphereState, LoopEmpty, LerpFactorGenerator>>
-            )>::query())
-            .read_resource::<HeadlessTime>()
-            .build(|_, world, time, query| {
-                query
-                    .iter(world)
-                    .for_each(|(mut sphere, animation)| {
-                        sphere.set_property(animation.interpolate(time.current_frame()));
-                    });
-            }),
-    }
+pub fn sphere_animation_system_headless<
+    P: Property<S> + Component,
+    S: 'static + State + Send + Sync,
+>() -> Box<dyn Schedulable> {
+    SystemBuilder::new("sphere_animation_system")
+        .with_query(<(
+            Write<P>,
+            Read<Animation<S, LoopEmpty, LerpFactorGenerator>>,
+        )>::query())
+        .read_resource::<HeadlessTime>()
+        .build(|_, world, time, query| {
+            query.iter(world).for_each(|(mut property, animation)| {
+                property.set_property(animation.interpolate(time.current_frame()))
+            });
+        })
 }
 
 pub fn sphere_shape_system(load_mode: &LoadMode) -> Option<Box<dyn Schedulable>> {
     if let LoadMode::Radius = load_mode {
         Some(
             SystemBuilder::new("sphere_shape_system")
-                .with_query(<(
-                    Read<Sphere>,
-                    Read<DefaultColliderHandleComponent>
-                )>::query())
+                .with_query(<(Read<Sphere>, Read<DefaultColliderHandleComponent>)>::query())
                 .write_resource::<DefaultColliderSet<f32>>()
                 .build(|_, world, collider_set, query| {
-                    query
-                        .iter(world)
-                        .for_each(|(sphere, collider_handle)| {
-                            if let Some(collider) = collider_set.get_mut(collider_handle.0.clone()) {
-                                let shape_handle = ShapeHandle::<f32>::new(Ball::new(sphere.radius));
+                    query.iter(world).for_each(|(sphere, collider_handle)| {
+                        if let Some(collider) = collider_set.get_mut(collider_handle.0.clone()) {
+                            let shape_handle = ShapeHandle::<f32>::new(Ball::new(sphere.radius));
 
-                                collider.set_shape(shape_handle);
-                            }
-                        });
-                })
+                            collider.set_shape(shape_handle);
+                        }
+                    });
+                }),
         )
     } else {
         None
@@ -480,7 +454,10 @@ impl<H: BodyHandle> ForceGenerator<f32, H> for DragSpring<H> {
 
                 body.apply_force(
                     self.part.1,
-                    &Force3::linear((&self.center - position.translation.vector) * self.factor / parameters.dt()),
+                    &Force3::linear(
+                        (&self.center - position.translation.vector) * self.factor
+                            / parameters.dt(),
+                    ),
                     ForceType::VelocityChange,
                     false,
                 );
