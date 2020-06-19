@@ -2,7 +2,6 @@ use anyhow::Error;
 use legion::resource::Resource;
 use legion::schedule::{Builder, Schedulable, Schedule};
 use legion::world::World;
-use serde::export::PhantomData;
 
 pub trait Bundle {
     type Phase1: BundlePhase1;
@@ -120,7 +119,7 @@ pub struct BundleGroupPhase1 {
 }
 
 impl BundlePhase1 for BundleGroupPhase1 {
-    fn add_systems(mut self, world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, world: &World, builder: Builder) -> Result<Builder, Error> {
         let mut builder = builder;
 
         for bundle in self.bundles {
@@ -144,7 +143,7 @@ impl<R: Resource> ResourceBundle<R> {
 impl<R: Resource> Bundle for ResourceBundle<R> {
     type Phase1 = ();
 
-    fn add_entities_and_resources(mut self, world: &mut World) -> Result<(), Error> {
+    fn add_entities_and_resources(self, world: &mut World) -> Result<(), Error> {
         world.resources.insert(self.resource);
         Ok(())
     }
@@ -163,7 +162,7 @@ impl SystemBundle {
 impl Bundle for SystemBundle {
     type Phase1 = Self;
 
-    fn add_entities_and_resources(mut self, _world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, _world: &mut World) -> Result<Self::Phase1, Error> {
         Ok(self)
     }
 }

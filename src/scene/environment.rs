@@ -38,7 +38,7 @@ impl<P: AsRef<Path>, B: Backend> EnvironmentBundle<P, B> {
 impl<P: AsRef<Path>, B: Backend> Bundle for EnvironmentBundle<P, B> {
     type Phase1 = ();
 
-    fn add_entities_and_resources(mut self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
         let EnvironmentBundle {
             ambient_light,
             light,

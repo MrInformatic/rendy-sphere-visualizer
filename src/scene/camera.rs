@@ -28,7 +28,7 @@ impl CameraBundle {
 impl Bundle for CameraBundle {
     type Phase1 = CameraBundlePhase1;
 
-    fn add_entities_and_resources(mut self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
         let CameraBundle {
             view_matrix,
             fov,
@@ -36,19 +36,18 @@ impl Bundle for CameraBundle {
             far,
         } = self;
 
-        let resolution = world
-            .resources
-            .get::<Resolution>()
-            .expect("Resolution was not inserted into world");
+        let (width, height) = {
+            let resolution = world
+                .resources
+                .get::<Resolution>()
+                .expect("Resolution was not inserted into world");
 
-        world.resources.insert(Camera::new(
-            view_matrix,
-            fov,
-            near,
-            far,
-            resolution.width(),
-            resolution.height(),
-        ));
+            (resolution.width(), resolution.height())
+        };
+
+        world
+            .resources
+            .insert(Camera::new(view_matrix, fov, near, far, width, height));
         Ok(CameraBundlePhase1)
     }
 }
