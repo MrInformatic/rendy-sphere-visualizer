@@ -1,7 +1,7 @@
 use crate::bundle::Bundle;
 use crate::cubemap::HdrCubeMapBuilder;
 use crate::ext::CUBEMAP_SAMPLER_DESC;
-use crate::scene::light::Light;
+use crate::world::light::Light;
 use anyhow::Error;
 use legion::schedule::Builder;
 use legion::world::World;

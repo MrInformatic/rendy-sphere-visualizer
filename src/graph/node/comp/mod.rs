@@ -1,7 +1,7 @@
 use crate::ext::{create_fullscreen_triangle, transform_point, Std140, FULLSCREEN_SAMPLER_DESC};
 use crate::ext::{GraphContextExt, SAMPLED_IMAGE_IMAGE_ACCESS};
 use crate::mem::{element, CombinedBufferCalculator};
-//use crate::scene::SceneView;
+//use crate::world::SceneView;
 
 use nalgebra_glm::{inverse, Mat4, Vec3};
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
@@ -30,8 +30,8 @@ use rendy::resource::{
 };
 use rendy::shader::{ShaderSet, SpirvShader};
 
-use crate::scene::camera::Camera;
-use crate::scene::environment::Environment;
+use crate::world::camera::Camera;
+use crate::world::environment::Environment;
 use legion::world::World;
 use std::mem::size_of;
 
@@ -46,13 +46,13 @@ pub struct Args {
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/comp.vert.spv"),
+        include_bytes!("../../../../assets/shaders/comp.vert.spv"),
         ShaderStageFlags::VERTEX,
         "main",
     ).expect("failed to load vertex shader");
 
     static ref FRAGMENT: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/comp.frag.spv"),
+        include_bytes!("../../../../assets/shaders/comp.frag.spv"),
         ShaderStageFlags::FRAGMENT,
         "main",
     ).expect("failed to load fragment shader");

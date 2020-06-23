@@ -32,9 +32,9 @@ use rendy::resource::Tiling;
 use crate::animation::Frame;
 use crate::application::{application_bundle, ApplicationBundleParams};
 use crate::bundle::{Bundle, BundlePhase1};
-use crate::scene::resolution::Resolution;
-use crate::scene::sphere::{LoadMode, SphereLimits};
-use crate::scene::time::HeadlessTime;
+use crate::world::resolution::Resolution;
+use crate::world::sphere::{LoadMode, SphereLimits};
+use crate::world::time::HeadlessTime;
 use clap::{App, Arg, ArgGroup};
 use image::ColorType;
 use legion::world::{Universe, World};
@@ -53,9 +53,8 @@ pub mod event;
 pub mod ext;
 pub mod graph;
 pub mod mem;
-pub mod node;
 pub mod physics;
-pub mod scene;
+pub mod world;
 pub mod audio;
 
 lazy_static! {

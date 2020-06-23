@@ -1,8 +1,7 @@
 use crate::mem::{element, element_multi, CombinedBufferCalculator};
-//use crate::scene::SceneView;
-use crate::scene::camera::Camera;
-use crate::scene::color_ramp::ColorRamp;
-use crate::scene::sphere::{PositionComponent, Sphere, SphereLimits};
+use crate::world::camera::Camera;
+use crate::world::color_ramp::ColorRamp;
+use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
 use genmesh::generators::{IndexedPolygon, SharedVertex, SphereUv};
 use genmesh::EmitTriangles;
 use legion::query::{IntoQuery, Read};
@@ -79,13 +78,13 @@ pub struct Args {
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/gbuffer.vert.spv"),
+        include_bytes!("../../../../assets/shaders/gbuffer.vert.spv"),
         ShaderStageFlags::VERTEX,
         "main",
     ).expect("failed to load vertex shader");
 
     static ref FRAGMENT: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/gbuffer.frag.spv"),
+        include_bytes!("../../../../assets/shaders/gbuffer.frag.spv"),
         ShaderStageFlags::FRAGMENT,
         "main",
     ).expect("failed to load fragment shader");

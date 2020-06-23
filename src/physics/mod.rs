@@ -1,5 +1,5 @@
 use crate::bundle::{Bundle, BundlePhase1};
-use crate::scene::sphere::PositionComponent;
+use crate::world::sphere::PositionComponent;
 use anyhow::Error;
 use legion::query::{IntoQuery, Read, Write};
 use legion::schedule::{Builder, Schedulable};

@@ -1,16 +1,16 @@
 use crate::ext::{
-    create_mesh_from_shape, transform_point, GraphContextExt, Std140, FULLSCREEN_SAMPLER_DESC,
-    SAMPLED_IMAGE_IMAGE_ACCESS,
+    transform_point, GraphContextExt, Std140, FULLSCREEN_SAMPLER_DESC, SAMPLED_IMAGE_IMAGE_ACCESS,
 };
 use crate::mem::{element, element_multi, CombinedBufferCalculator};
-use crate::node::dfao::DFAOParams;
-//use crate::scene::SceneView;
-use crate::scene::camera::Camera;
-use crate::scene::sphere::{PositionComponent, Sphere, SphereLimits};
-use genmesh::generators::Cube;
+
+use crate::world::camera::Camera;
+use crate::world::environment::Environment;
+use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
 use legion::query::{IntoQuery, Read};
 use legion::world::World;
-use nalgebra_glm::{Mat4, Vec3};
+use nalgebra_glm::{
+    identity, quat, quat_normalize, quat_to_mat4, scale, translate, vec3, Mat4, Vec3,
+};
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
 use rendy::factory::Factory;
 use rendy::graph::render::{
@@ -24,8 +24,8 @@ use rendy::hal::format::{Format, Swizzle};
 use rendy::hal::image::ViewKind;
 use rendy::hal::pso::{
     BlendOp, BlendState, ColorBlendDesc, ColorMask, CreationError, DepthStencilDesc, Descriptor,
-    DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, Rasterizer,
-    ShaderStageFlags, VertexInputRate,
+    DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType, Element, Face, Primitive,
+    Rasterizer, ShaderStageFlags, VertexInputRate,
 };
 use rendy::hal::Backend;
 use rendy::memory::{Dynamic, Write};
@@ -37,67 +37,88 @@ use rendy::shader::{ShaderSet, SpirvShader};
 use std::mem::size_of;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Args {
-    projection_matrix: Std140<Mat4>,
-    offset: f32,
+#[derive(Clone, Copy)]
+struct Args {
+    light_position: Std140<Vec3>,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
-pub struct Instance {
-    center: Vec3,
-    radius: f32,
+struct Instance {
+    model_view_projection: Mat4,
+    sphere_center: Vec3,
+    sphere_radius: f32,
+}
+
+impl Instance {
+    pub fn new(
+        view_matrix: &Mat4,
+        projection_matrix: &Mat4,
+        light_position: &Vec3,
+        sphere_center: &Vec3,
+        sphere_radius: f32,
+    ) -> Self {
+        let sub = sphere_center - light_position;
+        let dist = sub.magnitude();
+        let dir = sub / dist;
+        let factor = sphere_radius / (dist - sphere_radius);
+        let look_at = quat_normalize(&quat(dir.y, -dir.x, 0.0, 1.0 - dir.z));
+        let model_matrix = scale(
+            &scale(
+                &(translate(&identity(), light_position) * quat_to_mat4(&look_at)),
+                &vec3(1000.0, 1000.0, 1000.0),
+            ),
+            &vec3(factor, factor, 1.0),
+        );
+
+        let model_view_projection = projection_matrix * view_matrix * model_matrix;
+        Self {
+            model_view_projection,
+            sphere_center: transform_point(&sphere_center, view_matrix),
+            sphere_radius,
+        }
+    }
 }
 
 impl AsVertex for Instance {
     fn vertex() -> VertexFormat {
         VertexFormat::new((
-            (Format::Rgb32Sfloat, "center"),
-            (Format::R32Sfloat, "radius"),
+            (Format::Rgba32Sfloat, "model_view_projection"),
+            (Format::Rgba32Sfloat, "model_view_projection"),
+            (Format::Rgba32Sfloat, "model_view_projection"),
+            (Format::Rgba32Sfloat, "model_view_projection"),
+            (Format::Rgb32Sfloat, "sphere_center"),
+            (Format::R32Sfloat, "sphere_radius"),
         ))
     }
 }
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/dfao_sphere.vert.spv"),
+        include_bytes!("../../../../assets/shaders/rtsh_sphere.vert.spv"),
         ShaderStageFlags::VERTEX,
         "main",
     ).expect("failed to load vertex shader");
 
     static ref FRAGMENT: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/dfao_sphere.frag.spv"),
+        include_bytes!("../../../../assets/shaders/rtsh_sphere.frag.spv"),
         ShaderStageFlags::FRAGMENT,
         "main",
     ).expect("failed to load fragment shader");
 
     static ref SHADERS: rendy::shader::ShaderSetBuilder = rendy::shader::ShaderSetBuilder::default()
-        .with_vertex(&*VERTEX).expect("failed to add vertex shader to shader set")
+        .with_vertex(&*VERTEX).expect("failed to add vertex shader to shader set ")
         .with_fragment(&*FRAGMENT).expect("failed to add fragment shader to shader set");
 }
 
 #[derive(Debug)]
-pub struct DFAOSphereDesc {
-    params: DFAOParams,
-}
+pub struct RTSHSphereDesc;
 
-impl DFAOSphereDesc {
-    pub fn new(params: DFAOParams) -> Self {
-        DFAOSphereDesc { params }
-    }
-}
-
-impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
-    type Pipeline = DFAOSphere<B>;
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for RTSHSphereDesc {
+    type Pipeline = RTSHSphere<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
-        vec![
-            // position
-            SAMPLED_IMAGE_IMAGE_ACCESS,
-            // normal
-            SAMPLED_IMAGE_IMAGE_ACCESS,
-        ]
+        vec![SAMPLED_IMAGE_IMAGE_ACCESS]
     }
 
     fn colors(&self) -> Vec<ColorBlendDesc> {
@@ -136,7 +157,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
                         binding: 0,
                         ty: DescriptorType::UniformBuffer,
                         count: 1,
-                        stage_flags: ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+                        stage_flags: ShaderStageFlags::FRAGMENT,
                         immutable_samplers: false,
                     }],
                 },
@@ -151,13 +172,6 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
                         },
                         DescriptorSetLayoutBinding {
                             binding: 1,
-                            ty: DescriptorType::SampledImage,
-                            count: 1,
-                            stage_flags: ShaderStageFlags::FRAGMENT,
-                            immutable_samplers: false,
-                        },
-                        DescriptorSetLayoutBinding {
-                            binding: 2,
                             ty: DescriptorType::SampledImage,
                             count: 1,
                             stage_flags: ShaderStageFlags::FRAGMENT,
@@ -186,17 +200,12 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
     ) -> Result<Self::Pipeline, CreationError> {
-        assert_eq!(images.len(), 2);
+        assert_eq!(images.len(), 1);
 
         let pos = &images[0];
-        let norm = &images[1];
 
         let pos_view = ctx
             .create_image_view(factory, pos, ViewKind::D2, Swizzle::NO)
-            .expect("failed to create image view");
-
-        let norm_view = ctx
-            .create_image_view(factory, norm, ViewKind::D2, Swizzle::NO)
             .expect("failed to create image view");
 
         let frames = ctx.frames_in_flight;
@@ -270,49 +279,46 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
                 array_offset: 0,
                 descriptors: Some(Descriptor::Image(pos_view.raw(), pos.layout)),
             }));
-
-            factory.write_descriptor_sets(Some(DescriptorSetWrite {
-                set: image_set.raw(),
-                binding: 2,
-                array_offset: 0,
-                descriptors: Some(Descriptor::Image(norm_view.raw(), norm.layout)),
-            }));
         }
 
-        let cube_mesh = create_mesh_from_shape(Cube::new(), queue, factory, |vertex| {
-            Position([vertex.pos.x, vertex.pos.y, vertex.pos.z])
-        })
-        .expect("failed to create cube mesh");
+        let cone_mesh = Mesh::<B>::builder()
+            .with_prim_type(Primitive::TriangleList)
+            .with_vertices(vec![
+                Position([0.0, 0.0, 0.0]),
+                Position([-1.0, -1.0, -1.0]),
+                Position([1.0, -1.0, -1.0]),
+                Position([1.0, 1.0, -1.0]),
+                Position([-1.0, 1.0, -1.0]),
+            ])
+            .with_indices(vec![0u32, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1])
+            .build(queue, factory)
+            .expect("failed to create cone mesh");
 
-        Ok(DFAOSphere {
-            sampler,
+        Ok(RTSHSphere {
             pos_view,
-            norm_view,
+            sampler,
             uniform_indirect_instance_calculator,
             uniform_indirect_instance_buffer,
             uniform_sets,
             image_set,
-            cube_mesh,
-            params: self.params,
+            cone_mesh,
         })
     }
 }
 
 #[derive(Debug)]
-pub struct DFAOSphere<B: Backend> {
-    sampler: Escape<Sampler<B>>,
+pub struct RTSHSphere<B: Backend> {
     pos_view: Escape<ImageView<B>>,
-    norm_view: Escape<ImageView<B>>,
+    sampler: Escape<Sampler<B>>,
     uniform_indirect_instance_calculator: CombinedBufferCalculator,
     uniform_indirect_instance_buffer: Escape<Buffer<B>>,
     uniform_sets: Vec<Escape<DescriptorSet<B>>>,
     image_set: Escape<DescriptorSet<B>>,
-    cube_mesh: Mesh<B>,
-    params: DFAOParams,
+    cone_mesh: Mesh<B>,
 }
 
-impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
-    type Desc = DFAOSphereDesc;
+impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
+    type Desc = RTSHSphereDesc;
 
     fn prepare(
         &mut self,
@@ -322,19 +328,23 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
         index: usize,
         aux: &World,
     ) -> PrepareResult {
-        let camera = aux
+        let environment = aux
             .resources
-            .get::<Camera>()
-            .expect("camera was not inserted into world");
+            .get::<Environment<B>>()
+            .expect("environment was not inserted into world");
 
         let limits = aux
             .resources
             .get::<SphereLimits>()
             .expect("limits was not inserted into world");
 
+        let camera = aux
+            .resources
+            .get::<Camera>()
+            .expect("camera was not inserted into world");
+
         let args = Args {
-            offset: self.params.offset.into(),
-            projection_matrix: camera.get_proj_matrix().clone().into(),
+            light_position: environment.light().get_position().clone().into(),
         };
 
         unsafe {
@@ -351,7 +361,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
             first_index: 0,
             first_instance: 0,
             vertex_offset: 0,
-            index_count: self.cube_mesh.len(),
+            index_count: self.cone_mesh.len(),
             instance_count: limits.sphere_count() as u32,
         };
 
@@ -362,7 +372,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
                     self.uniform_indirect_instance_calculator.offset(1, index),
                     &[draw_indexed_command],
                 )
-                .expect("failed to upload draw indirect commands");
+                .expect("failed to upload indirect draw commands");
         }
 
         {
@@ -390,10 +400,13 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
             for (instance, (sphere, position)) in
                 instance_slice.iter_mut().zip(query.iter_immutable(aux))
             {
-                *instance = Instance {
-                    center: transform_point(&position.0, camera.get_view_matrix()),
-                    radius: sphere.radius(),
-                }
+                *instance = Instance::new(
+                    camera.get_view_matrix(),
+                    camera.get_proj_matrix(),
+                    environment.light().get_position(),
+                    &position.0,
+                    sphere.radius(),
+                );
             }
         }
 
@@ -418,9 +431,9 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
             encoder.bind_graphics_descriptor_sets(layout, 1, Some(self.image_set.raw()), None);
         }
 
-        self.cube_mesh
+        self.cone_mesh
             .bind(0, &[Position::vertex()], &mut encoder)
-            .expect("failed to bind cube mesh");
+            .expect("could not bind cone mesh");
 
         unsafe {
             encoder.bind_vertex_buffers(

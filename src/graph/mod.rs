@@ -1,10 +1,10 @@
-use crate::node::capture::{CaptureAction, CaptureDesc};
-use crate::node::comp::CompDesc;
-use crate::node::dfao::join::DFAOJoinDesc;
-use crate::node::dfao::sphere::DFAOSphereDesc;
-use crate::node::dfao::DFAOParams;
-use crate::node::gbuffer::GBufferDesc;
-use crate::node::rtsh::sphere::RTSHSphereDesc;
+use crate::graph::node::capture::{CaptureAction, CaptureDesc};
+use crate::graph::node::comp::CompDesc;
+use crate::graph::node::dfao::join::DFAOJoinDesc;
+use crate::graph::node::dfao::sphere::DFAOSphereDesc;
+use crate::graph::node::dfao::DFAOParams;
+use crate::graph::node::gbuffer::GBufferDesc;
+use crate::graph::node::rtsh::sphere::RTSHSphereDesc;
 use anyhow::Error;
 use futures::executor::{LocalPool, ThreadPool};
 use futures::future::RemoteHandle;
@@ -31,13 +31,15 @@ use rendy::wsi::Surface;
 use serde::export::PhantomData;
 
 use crate::event::StateId;
-use crate::scene::resolution::Resolution;
+use crate::world::resolution::Resolution;
 use legion::world::World;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufWriter;
 use std::ops::Deref;
 use std::path::Path;
+
+pub mod node;
 
 pub trait Output<B: Backend> {
     fn build(

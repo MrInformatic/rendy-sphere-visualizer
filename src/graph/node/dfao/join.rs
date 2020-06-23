@@ -3,8 +3,7 @@ use crate::ext::{
     SAMPLED_IMAGE_IMAGE_ACCESS,
 };
 use crate::mem::{element, CombinedBufferCalculator};
-use crate::node::dfao::DFAOParams;
-//use crate::scene::SceneView;
+use crate::graph::node::dfao::DFAOParams;
 use legion::world::World;
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
 use rendy::factory::Factory;
@@ -38,13 +37,13 @@ struct Args {
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/dfao_join.vert.spv"),
+        include_bytes!("../../../../assets/shaders/dfao_join.vert.spv"),
         ShaderStageFlags::VERTEX,
         "main",
     ).expect("failed to load vertex shader");
 
     static ref FRAGMENT: SpirvShader = SpirvShader::from_bytes(
-        include_bytes!("../../../assets/shaders/dfao_join.frag.spv"),
+        include_bytes!("../../../../assets/shaders/dfao_join.frag.spv"),
         ShaderStageFlags::FRAGMENT,
         "main",
     ).expect("failed to load fragment shader");
