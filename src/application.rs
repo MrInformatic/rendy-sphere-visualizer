@@ -18,12 +18,62 @@ use std::path::Path;
 use crate::audio::{SamplesBundle, CaptureSource, OptionCaptureSource};
 use rodio::{Source, Sample};
 
+pub enum ApplicationBundleParams<P> {
+    Load {
+        path: P,
+        load_mode: LoadMode,
+    },
+    FFT {
+        sphere_count: usize,
+        min_radius: f32,
+        low: f32,
+        high: f32,
+        attack: f32,
+        release: f32,
+        threshold: f32,
+    }
+}
+
+impl<P: AsRef<Path>> ApplicationBundleParams<P> {
+    pub fn sphere_bundle_params(self, sample_rate: f32, mode: Mode) -> SphereBundleParams<P> {
+        match self {
+            ApplicationBundleParams::Load {
+                path,
+                load_mode,
+            } => SphereBundleParams::Load {
+                path,
+                load_mode,
+                mode,
+            },
+            ApplicationBundleParams::FFT {
+                sphere_count,
+                min_radius,
+                low,
+                high,
+                attack,
+                release,
+                threshold,
+            } => SphereBundleParams::FFT {
+                sphere_count,
+                min_radius,
+                low,
+                high,
+                attack,
+                release,
+                threshold,
+                sample_rate,
+            }
+        }
+    }
+}
+
 pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
     factory: Factory<B>,
     families: Families<B>,
     resolution: Resolution,
     window: Option<Window>,
-    sphere_bundle_params: SphereBundleParams<P>,
+    application_bundle_params: ApplicationBundleParams<P>,
+    mode: Mode,
     source: S,
 ) -> Result<(impl Bundle, OptionCaptureSource<S>), Error> where S::Item: Sample {
     let graphics_family = families
@@ -72,14 +122,14 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
 
     application_bundle.add_resource(color_ramp);
 
-    match &sphere_bundle_params {
-        SphereBundleParams::Load { load_mode: LoadMode::Radius, .. } | SphereBundleParams::FFT { .. } => {
+    match &application_bundle_params {
+        ApplicationBundleParams::Load { load_mode: LoadMode::Radius, .. } | ApplicationBundleParams::FFT { .. } => {
             application_bundle.add_bundle(PhysicsBundle::new(vec3(0.0, 0.0, 0.0)));
         },
         _ => {}
     }
 
-    let source = if let SphereBundleParams::FFT { .. } = &sphere_bundle_params {
+    let source = if let ApplicationBundleParams::FFT { .. } = &application_bundle_params {
         let (samples_bundle, source) = SamplesBundle::new(source);
         application_bundle.add_bundle(samples_bundle);
 
@@ -88,7 +138,7 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
         OptionCaptureSource::Source(source)
     };
 
-    application_bundle.add_bundle(SphereBundle::new(sphere_bundle_params));
+    application_bundle.add_bundle(SphereBundle::new(application_bundle_params.sphere_bundle_params(source.sample_rate() as f32, mode)));
 
     Ok((application_bundle, source))
 }
