@@ -53,7 +53,8 @@ impl SamplesResource {
 
 pub struct CaptureSource<S> {
     source: S,
-    samples_resource: Arc<Mutex<SamplesResource>>
+    samples_resource: Arc<Mutex<SamplesResource>>,
+    channel_samples: Vec<f32>,
 }
 
 impl<S: Source> CaptureSource<S> where S::Item: Sample{
@@ -61,6 +62,7 @@ impl<S: Source> CaptureSource<S> where S::Item: Sample{
         CaptureSource {
             source,
             samples_resource: Arc::new(Mutex::new(SamplesResource::new())),
+            channel_samples: vec![],
         }
     }
     pub fn samples_resource(&self) -> Arc<Mutex<SamplesResource>> {
@@ -93,8 +95,12 @@ impl<S: Source> Iterator for CaptureSource<S> where S::Item: Sample {
         let next = self.source.next();
 
         if let Some(x) = &next {
-            let mut samples_resource = self.samples_resource.lock().unwrap();
-            samples_resource.push(x.to_f32())
+            self.channel_samples.push(x.to_f32());
+            if self.channel_samples.len() >= self.source.channels() as usize {
+                let mut samples_resource = self.samples_resource.lock().unwrap();
+                samples_resource.push(self.channel_samples.iter().sum::<f32>() / self.channel_samples.len() as f32);
+                self.channel_samples.clear()
+            }
         }
 
         next
@@ -138,9 +144,9 @@ impl<F: Filter> IIRFilter<F> {
 
             buffer_a.iter_mut()
                 .skip(1)
-                .map(|i| *i /= buffer_a_0);
+                .for_each(|i| *i /= buffer_a_0);
             buffer_b.iter_mut()
-                .map(|i| *i /= buffer_a_0);
+                .for_each(|i| *i /= buffer_a_0);
 
             buffer_a[0] = 1.0;
         }

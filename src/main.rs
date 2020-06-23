@@ -285,14 +285,12 @@ fn main() -> Result<(), Error> {
             low: 20.0,
             high: 20000.0,
             attack: 0.005,
-            release: 0.2,
+            release: 0.4,
             threshold: 0.1,
-            sample_rate: (decoder.sample_rate() * decoder.channels() as u32) as f32,
+            sample_rate: decoder.sample_rate() as f32,
         }
     };
-
-
-
+    
     let universe = Universe::new();
 
     let world = universe.create_world();
