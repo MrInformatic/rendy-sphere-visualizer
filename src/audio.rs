@@ -275,3 +275,56 @@ impl<T> RingBuffer<T> {
             .chain(self.buffer[0..self.next_index].iter())
     }
 }
+
+pub enum OptionCaptureSource<S> {
+    Capture(CaptureSource<S>),
+    Source(S)
+}
+
+impl<S: Source> Source for OptionCaptureSource<S> where S::Item: Sample {
+    fn current_frame_len(&self) -> Option<usize> {
+        match self {
+            OptionCaptureSource::Capture(source) => source.current_frame_len(),
+            OptionCaptureSource::Source(source) => source.current_frame_len(),
+        }
+    }
+
+    fn channels(&self) -> u16 {
+        match self {
+            OptionCaptureSource::Capture(source) => source.channels(),
+            OptionCaptureSource::Source(source) => source.channels(),
+        }
+    }
+
+    fn sample_rate(&self) -> u32 {
+        match self {
+            OptionCaptureSource::Capture(source) => source.sample_rate(),
+            OptionCaptureSource::Source(source) => source.sample_rate(),
+        }
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        match self {
+            OptionCaptureSource::Capture(source) => source.total_duration(),
+            OptionCaptureSource::Source(source) => source.total_duration(),
+        }
+    }
+}
+
+impl<S: Source> Iterator for OptionCaptureSource<S> where S::Item: Sample {
+    type Item = S::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            OptionCaptureSource::Capture(source) => source.next(),
+            OptionCaptureSource::Source(source) => source.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            OptionCaptureSource::Capture(source) => source.size_hint(),
+            OptionCaptureSource::Source(source) => source.size_hint(),
+        }
+    }
+}
