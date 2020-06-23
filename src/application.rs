@@ -1,11 +1,11 @@
 use crate::bundle::{Bundle, BundleGroup};
 use crate::physics::PhysicsBundle;
-use crate::scene::camera::CameraBundle;
-use crate::scene::color_ramp::ColorRamp;
-use crate::scene::environment::EnvironmentBundle;
-use crate::scene::light::Light;
-use crate::scene::resolution::Resolution;
-use crate::scene::sphere::{LoadMode, SphereBundle, SphereBundleParams};
+use crate::world::camera::CameraBundle;
+use crate::world::color_ramp::ColorRamp;
+use crate::world::environment::EnvironmentBundle;
+use crate::world::light::Light;
+use crate::world::resolution::Resolution;
+use crate::world::sphere::{LoadMode, SphereBundle, SphereBundleParams};
 use crate::Mode;
 use crate::ENVIRONMENT_MAP_PATH;
 use anyhow::Error;

@@ -1,5 +1,5 @@
 use crate::bundle::{Bundle, BundlePhase1};
-use crate::scene::resolution::Resolution;
+use crate::world::resolution::Resolution;
 use anyhow::Error;
 use legion::query::{IntoQuery, Write};
 use legion::schedule::{Builder, Schedulable};

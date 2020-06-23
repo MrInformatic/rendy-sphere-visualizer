@@ -1,8 +1,8 @@
 use crate::animation::{Animation, Frame, LerpFactorGenerator, LoopEmpty, Property, State};
 use crate::bundle::{Bundle, BundlePhase1};
 use crate::physics::{BodyPartHandleComponent, ColliderHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent, DefaultBodyPartHandleComponent};
-use crate::scene::data::{PositionData, SphereData};
-use crate::scene::time::{HeadlessTime, Time};
+use crate::world::data::{PositionData, SphereData};
+use crate::world::time::{HeadlessTime, Time};
 use crate::Mode;
 use anyhow::Error;
 use legion::query::{IntoQuery, Read, Write};

@@ -3,7 +3,7 @@
 use crate::animation::{Animation, Frame, Property, State};
 use crate::cubemap::HdrCubeMapBuilder;
 use crate::ext::CUBEMAP_SAMPLER_DESC;
-use crate::scene::data::SphereData;
+use crate::world::data::SphereData;
 use anyhow::Error;
 use legion::query::{IntoQuery, Read, Write};
 use legion::schedule::Schedulable;
