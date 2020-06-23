@@ -30,7 +30,7 @@ use rendy::init::winit::window::Window;
 use rendy::resource::Tiling;
 
 use crate::animation::Frame;
-use crate::application::application_bundle;
+use crate::application::{application_bundle, ApplicationBundleParams};
 use crate::bundle::{Bundle, BundlePhase1};
 use crate::scene::resolution::Resolution;
 use crate::scene::sphere::{LoadMode, SphereBundleParams, SphereLimits};
@@ -69,7 +69,7 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
     factory: Factory<B>,
     families: Families<B>,
     output_directory: P,
-    sphere_bundle_params: SphereBundleParams<P2>,
+    application_bundle_params: ApplicationBundleParams<P2>,
     source: S
 ) -> Result<(), Error> where S::Item: Sample{
     let resolution = Resolution::new(3840, 2160);
@@ -96,8 +96,9 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
         families,
         resolution,
         None,
-        sphere_bundle_params,
-        source
+        application_bundle_params,
+        Mode::Headless,
+        source,
     )?;
 
     let mut schedule = bundle
@@ -155,7 +156,7 @@ fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + 
     surface: Surface<B>,
     window: Window,
     event_loop: EventLoop<T>,
-    sphere_bundle_params: SphereBundleParams<P>,
+    application_bundle_params: ApplicationBundleParams<P>,
     source: S
 ) -> Result<(), Error> where S::Item: Sample {
     unsafe {
@@ -169,8 +170,9 @@ fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + 
         families,
         resolution,
         Some(window),
-        sphere_bundle_params,
-        source
+        application_bundle_params,
+        Mode::Realtime,
+        source,
     )?;
 
     let mut schedule = bundle
@@ -259,27 +261,20 @@ fn main() -> Result<(), Error> {
         )
         .get_matches();
 
-    let mode = match matches.is_present("headless") {
-        false => Mode::Realtime,
-        true => Mode::Headless
-    };
-
     let decoder = Decoder::new(BufReader::new(File::open(matches.value_of("real-time-analyser").unwrap())?))?;
 
     let sphere_bundle_params = if let Some(real_time_physics) = matches.value_of("real-time-physics") {
-        SphereBundleParams::Load {
-            mode,
+        ApplicationBundleParams::Load {
             load_mode: LoadMode::Radius,
             path: real_time_physics.to_string()
         }
     } else if let Some(pre_calculated_physics) = matches.value_of("pre-calculated-physics") {
-        SphereBundleParams::Load {
-            mode,
+        ApplicationBundleParams::Load {
             load_mode: LoadMode::PositionRadius,
             path: pre_calculated_physics.to_string()
         }
     } else {
-        SphereBundleParams::FFT {
+        ApplicationBundleParams::FFT {
             min_radius: 0.1,
             sphere_count: 64,
             low: 20.0,
@@ -287,7 +282,6 @@ fn main() -> Result<(), Error> {
             attack: 0.005,
             release: 0.4,
             threshold: 0.1,
-            sample_rate: decoder.sample_rate() as f32,
         }
     };
     
