@@ -15,7 +15,7 @@ use rendy::factory::Factory;
 use rendy::hal::Backend;
 use rendy::init::winit::window::Window;
 use std::path::Path;
-use crate::audio::{SamplesBundle, CaptureSource, OptionCaptureSource};
+use crate::audio::{SamplesBundle, OptionCaptureSource};
 use rodio::{Source, Sample};
 
 pub enum ApplicationBundleParams<P> {
@@ -23,7 +23,7 @@ pub enum ApplicationBundleParams<P> {
         path: P,
         load_mode: LoadMode,
     },
-    FFT {
+    Analyze {
         sphere_count: usize,
         min_radius: f32,
         low: f32,
@@ -45,7 +45,7 @@ impl<P: AsRef<Path>> ApplicationBundleParams<P> {
                 load_mode,
                 mode,
             },
-            ApplicationBundleParams::FFT {
+            ApplicationBundleParams::Analyze {
                 sphere_count,
                 min_radius,
                 low,
@@ -53,7 +53,7 @@ impl<P: AsRef<Path>> ApplicationBundleParams<P> {
                 attack,
                 release,
                 threshold,
-            } => SphereBundleParams::FFT {
+            } => SphereBundleParams::Analyze {
                 sphere_count,
                 min_radius,
                 low,
@@ -123,13 +123,13 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
     application_bundle.add_resource(color_ramp);
 
     match &application_bundle_params {
-        ApplicationBundleParams::Load { load_mode: LoadMode::Radius, .. } | ApplicationBundleParams::FFT { .. } => {
+        ApplicationBundleParams::Load { load_mode: LoadMode::Radius, .. } | ApplicationBundleParams::Analyze { .. } => {
             application_bundle.add_bundle(PhysicsBundle::new(vec3(0.0, 0.0, 0.0)));
         },
         _ => {}
     }
 
-    let source = if let ApplicationBundleParams::FFT { .. } = &application_bundle_params {
+    let source = if let ApplicationBundleParams::Analyze { .. } = &application_bundle_params {
         let (samples_bundle, source) = SamplesBundle::new(source);
         application_bundle.add_bundle(samples_bundle);
 

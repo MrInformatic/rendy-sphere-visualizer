@@ -33,7 +33,7 @@ use crate::animation::Frame;
 use crate::application::{application_bundle, ApplicationBundleParams};
 use crate::bundle::{Bundle, BundlePhase1};
 use crate::scene::resolution::Resolution;
-use crate::scene::sphere::{LoadMode, SphereBundleParams, SphereLimits};
+use crate::scene::sphere::{LoadMode, SphereLimits};
 use crate::scene::time::HeadlessTime;
 use clap::{App, Arg, ArgGroup};
 use image::ColorType;
@@ -44,7 +44,6 @@ use std::path::{Path, PathBuf};
 use rodio::{Source, Sample, Decoder, play_raw, default_output_device};
 use std::io::BufReader;
 use std::fs::File;
-use rodio::source::SineWave;
 
 pub mod animation;
 pub mod application;
@@ -271,7 +270,7 @@ fn main() -> Result<(), Error> {
             path: pre_calculated_physics.to_string()
         }
     } else {
-        ApplicationBundleParams::FFT {
+        ApplicationBundleParams::Analyze {
             min_radius: 0.1,
             sphere_count: 64,
             low: 20.0,

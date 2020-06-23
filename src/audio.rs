@@ -1,19 +1,10 @@
-use legion::schedule::Schedulable;
-use legion::system::SystemBuilder;
-use rodio::{Source, Sample, Device, play_raw};
+use rodio::{Source, Sample};
 use cpal::Sample as CPalSaple;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
-use serde::export::PhantomData;
-use std::intrinsics::transmute;
 use crate::bundle::Bundle;
 use anyhow::Error;
 use legion::world::World;
-use nalgebra::{ComplexField, Normed};
-use rustfft::{FFT, FFTplanner};
-use rustfft::num_complex::Complex32;
-use rand::seq::index::sample;
-use std::ops::{Deref, DerefMut};
 
 pub struct SamplesBundle {
     samples_resource: Arc<Mutex<SamplesResource>>,
@@ -108,13 +99,6 @@ impl<S: Source> Iterator for CaptureSource<S> where S::Item: Sample {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.source.size_hint()
-    }
-}
-
-#[inline]
-fn next_lower(x: f32) -> f32 {
-    unsafe {
-        transmute(transmute::<_, u32>(x) - 1)
     }
 }
 
