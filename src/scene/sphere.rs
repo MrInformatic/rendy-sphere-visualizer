@@ -46,7 +46,7 @@ pub enum SphereBundleParams<P> {
         load_mode: LoadMode,
         mode: Mode,
     },
-    FFT {
+    Analyze {
         sphere_count: usize,
         min_radius: f32,
         low: f32,
@@ -122,7 +122,7 @@ impl<P: AsRef<Path>> SphereBundle<P> {
             .expect("force generator set was not inserted into world");
 
         (0..limits.sphere_count())
-            .map(move |(i)| {
+            .map(move |i| {
                 let position = PositionComponent(vec3(
                     (i as f32 - offset) * factor,
                     rng.gen_range(-0.05, 0.05),
@@ -267,7 +267,7 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                 Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::Load{ mode, load_mode } })
             },
-            SphereBundleParams::FFT { sphere_count, min_radius, low, high, attack, release, threshold, sample_rate } => {
+            SphereBundleParams::Analyze { sphere_count, min_radius, low, high, attack, release, threshold, sample_rate } => {
                 let limits = SphereLimits::new(sphere_count, None);
 
                 let entity_data = {
@@ -298,7 +298,7 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                 world.resources.insert(limits);
 
-                Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::FFT { min_size: min_radius } })
+                Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::Analyze { min_size: min_radius } })
             }
         }
     }
@@ -309,7 +309,7 @@ pub enum SphereBundlePhase1Params {
         mode: Mode,
         load_mode: LoadMode,
     },
-    FFT {
+    Analyze {
         min_size: f32
     }
 }
@@ -337,7 +337,7 @@ impl BundlePhase1 for SphereBundlePhase1 {
                     PositionState,
                 >());
             }
-            SphereBundlePhase1Params::Load { mode: mode, load_mode: LoadMode::Radius } => {
+            SphereBundlePhase1Params::Load { mode, load_mode: LoadMode::Radius } => {
                 match mode {
                     Mode::Realtime => builder =
                         builder.add_system(sphere_animation_system_realtime::<Sphere, SphereState>()),
@@ -347,7 +347,7 @@ impl BundlePhase1 for SphereBundlePhase1 {
 
                 builder = builder.add_system(sphere_shape_system());
             }
-            SphereBundlePhase1Params::FFT {min_size} => {
+            SphereBundlePhase1Params::Analyze {min_size} => {
                 builder = builder
                     .add_system(sphere_analyzer_system(min_size))
                     .add_system(sphere_shape_system())
@@ -502,7 +502,7 @@ pub fn sphere_shape_system() -> Box<dyn Schedulable> {
 }
 
 pub fn sphere_analyzer_system(min_size: f32) -> Box<dyn Schedulable> {
-    SystemBuilder::new("sphere_fft_system")
+    SystemBuilder::new("sphere_analyzer_system")
         .with_query(<(Write<Sphere>, Write<DynFilter>)>::query())
         .read_resource::<Arc<Mutex<SamplesResource>>>()
         .build(move |_, world, samples, query| {
