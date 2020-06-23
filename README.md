@@ -38,13 +38,13 @@ folder and run:
 
 ```
 // Linux
-cargo run --features vulkan --release
+cargo run --features vulkan --release -- AUDIO_FILE[.mp3|.wav|.ogg]
 
 // Windows
-cargo run --features dx12 --release
+cargo run --features dx12 --release -- AUDIO_FILE[.mp3|.wav|.ogg]
 
 // Mac Os
-cargo run --features metal --release
+cargo run --features metal --release -- AUDIO_FILE[.mp3|.wav|.ogg]
 ```
 
 If you have a problem running the appropriate Command on the
@@ -57,8 +57,11 @@ all the backends.
 * [Rust](https://www.rust-lang.org/) - The programming language
 * [Cargo](https://doc.rust-lang.org/cargo/) - Dependency Management
 * [Rendy](https://github.com/amethyst/rendy) - The rendering framework
-* [Nalgebra](https://nalgebra.org/) - The linalg libary
-* [Serde](https://serde.rs/) - The serialization libary
+* [Legion](https://github.com/TomGillen/legion) - entity component system
+* [NPhysics](https://nphysics.org/) - physics engine
+* [Rodio](https://github.com/RustAudio/rodio) - audio playback library
+* [Nalgebra](https://nalgebra.org/) - The linalg library
+* [Serde](https://serde.rs/) - The serialization library
 
 For a complete list see the Cargo.toml file under dependencies.
 
