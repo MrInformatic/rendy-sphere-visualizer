@@ -15,7 +15,7 @@ use rendy::factory::Factory;
 use rendy::hal::Backend;
 use rendy::init::winit::window::Window;
 use std::path::Path;
-use crate::audio::{SamplesBundle, CaptureSource};
+use crate::audio::{SamplesBundle, CaptureSource, OptionCaptureSource};
 use rodio::{Source, Sample};
 
 pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
@@ -25,7 +25,7 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
     window: Option<Window>,
     sphere_bundle_params: SphereBundleParams<P>,
     source: S,
-) -> Result<(impl Bundle, CaptureSource<S>), Error> where S::Item: Sample {
+) -> Result<(impl Bundle, OptionCaptureSource<S>), Error> where S::Item: Sample {
     let graphics_family = families
         .with_capability::<Graphics>()
         .ok_or(anyhow!("this GRAPHICS CARD do not support GRAPHICS"))?;
@@ -79,15 +79,16 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
         _ => {}
     }
 
-    /*application_bundle.add_bundle(SphereBundle::new(
-        Some(("assets/scenes/out2.json", load_mode, mode))
-    ));*/
+    let source = if let SphereBundleParams::FFT { .. } = &sphere_bundle_params {
+        let (samples_bundle, source) = SamplesBundle::new(source);
+        application_bundle.add_bundle(samples_bundle);
+
+        OptionCaptureSource::Capture(source)
+    } else {
+        OptionCaptureSource::Source(source)
+    };
 
     application_bundle.add_bundle(SphereBundle::new(sphere_bundle_params));
-
-    let (fft_bundle, source) = SamplesBundle::new(source);
-
-    application_bundle.add_bundle(fft_bundle);
 
     Ok((application_bundle, source))
 }
