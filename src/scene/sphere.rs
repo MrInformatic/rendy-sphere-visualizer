@@ -51,7 +51,9 @@ pub enum SphereBundleParams<P> {
         min_radius: f32,
         low: f32,
         high: f32,
-        base: f32,
+        attack: f32,
+        release: f32,
+        threshold: f32,
         sample_rate: f32,
     }
 }
@@ -265,7 +267,7 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                 Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::Load{ mode, load_mode } })
             },
-            SphereBundleParams::FFT { sphere_count, min_radius, low, high, base, sample_rate } => {
+            SphereBundleParams::FFT { sphere_count, min_radius, low, high, attack, release, threshold, sample_rate } => {
                 let limits = SphereLimits::new(sphere_count, None);
 
                 let entity_data = {
@@ -273,14 +275,15 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
                         .map(|(i, position, rigid_body, collider, force_generator)| {
                             let sphere = Sphere::new(min_radius);
 
-                            let low = 20.0 * 1.1f32.powf(i as f32);
-                            let high = 20.0 * 1.1f32.powf((i + 1) as f32);
+                            let exponent = (high / low).powf(1.0 / limits.sphere_count() as f32);
+                            let low_cutoff = low * exponent.powf(i as f32);
+                            let high_cutoff = low * exponent.powf((i + 1) as f32);
 
-                            let low_pass = IIRFilter::low_pass((), low, 1.0, sample_rate);
+                            let low_pass = IIRFilter::low_pass((), high_cutoff, 1.0, sample_rate);
 
-                            let high_pass = IIRFilter::high_pass(low_pass, high, 1.0, sample_rate);
+                            let high_pass = IIRFilter::high_pass(low_pass, low_cutoff, 1.0, sample_rate);
 
-                            let envelope = Envelope::new(high_pass, 0.1, 0.005, 0.4, sample_rate);
+                            let envelope = Envelope::new(high_pass, threshold, attack, release, sample_rate);
 
                             let filter: DynFilter = Box::new(envelope);
 
