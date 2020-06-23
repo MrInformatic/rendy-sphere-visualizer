@@ -280,7 +280,7 @@ fn main() -> Result<(), Error> {
         }
     } else {
         SphereBundleParams::FFT {
-            min_size: 0.1,
+            min_radius: 0.1,
             sphere_count: 64,
             low: 20.0,
             high: 20000.0,

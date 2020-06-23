@@ -1,9 +1,6 @@
 use crate::animation::{Animation, Frame, LerpFactorGenerator, LoopEmpty, Property, State};
 use crate::bundle::{Bundle, BundlePhase1};
-use crate::physics::{
-    BodyPartHandleComponent, ColliderHandleComponent, DefaultColliderHandleComponent,
-    DefaultForceGeneratorHandleComponent,
-};
+use crate::physics::{BodyPartHandleComponent, ColliderHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent, DefaultBodyPartHandleComponent};
 use crate::scene::data::{PositionData, SphereData};
 use crate::scene::time::{HeadlessTime, Time};
 use crate::Mode;
@@ -33,6 +30,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use crate::audio::{SamplesResource, IIRFilter, Envelope, Filter};
+use legion::entity::Entity;
 
 type DynFilter = Box<dyn Filter + Send + Sync>;
 
@@ -50,7 +48,7 @@ pub enum SphereBundleParams<P> {
     },
     FFT {
         sphere_count: usize,
-        min_size: f32,
+        min_radius: f32,
         low: f32,
         high: f32,
         base: f32,
@@ -66,6 +64,131 @@ impl<P: AsRef<Path>> SphereBundle<P> {
     pub fn new(params: SphereBundleParams<P>) -> Self {
         Self {
             params
+        }
+    }
+
+    fn position_animation(data: &[SphereData]) -> (PositionComponent, Animation<PositionState, LoopEmpty, LerpFactorGenerator>) {
+        let position = PositionComponent::from_position_data(&data[0].position);
+        let position_states = data
+            .iter()
+            .map(|sphere_data| {
+                PositionState::from_position_data(&sphere_data.position)
+            })
+            .collect::<Vec<_>>();
+
+        let position_animation = Animation::without_times(
+            position_states,
+            LoopEmpty,
+            LerpFactorGenerator,
+        );
+
+        (position, position_animation)
+    }
+
+    fn sphere_animation(data: &[SphereData]) -> (Sphere, Animation<SphereState, LoopEmpty, LerpFactorGenerator>) {
+        let sphere = Sphere::new(data[0].radius);
+        let sphere_states = data
+            .iter()
+            .map(|sphere_data| SphereState::new(sphere_data.radius))
+            .collect::<Vec<_>>();
+
+        let sphere_animation =
+            Animation::without_times(sphere_states, LoopEmpty, LerpFactorGenerator);
+
+        (sphere, sphere_animation)
+    }
+
+    fn sphere_physics<'a, F: 'a + FnMut(usize) -> f32>(world: &'a mut World, limits: &SphereLimits, mut radius: F) -> impl 'a + Iterator<Item=(usize, PositionComponent, DefaultBodyPartHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent)>{
+        let mut rng = thread_rng();
+
+        let offset = (limits.sphere_count() - 1) as f32 * 0.5;
+        let factor = 16.0 / limits.sphere_count() as f32;
+
+        let mut body_set = world
+            .resources
+            .get_mut::<DefaultBodySet<f32>>()
+            .expect("body set was not inserted into world");
+
+        let mut collider_set = world
+            .resources
+            .get_mut::<DefaultColliderSet<f32>>()
+            .expect("body set was not inserted into world");
+
+        let mut force_generator_set = world
+            .resources
+            .get_mut::<DefaultForceGeneratorSet<f32>>()
+            .expect("force generator set was not inserted into world");
+
+        (0..limits.sphere_count())
+            .map(move |(i)| {
+                let position = PositionComponent(vec3(
+                    (i as f32 - offset) * factor,
+                    rng.gen_range(-0.05, 0.05),
+                    rng.gen_range(-0.05, 0.05),
+                ));
+
+                let rigid_body = RigidBodyDesc::<f32>::new()
+                    .translation(position.0.clone())
+                    .gravity_enabled(false)
+                    .status(BodyStatus::Dynamic)
+                    .build();
+
+                let rigid_body_handle = BodyPartHandle(body_set.insert(rigid_body), 0);
+
+                let shape_handle = ShapeHandle::<f32>::new(Ball::new((radius)(i)));
+                let collider = ColliderDesc::new(shape_handle)
+                    .density(2190.0)
+                    .build(rigid_body_handle);
+
+                let collider_handle = collider_set.insert(collider);
+
+                let force_generator =
+                    DragSpring::new(rigid_body_handle, position.0.clone(), 0.1);
+
+                let force_generator_handle =
+                    force_generator_set.insert(Box::new(force_generator));
+
+                (
+                    i,
+                    position,
+                    BodyPartHandleComponent(rigid_body_handle),
+                    ColliderHandleComponent(collider_handle),
+                    DefaultForceGeneratorHandleComponent(force_generator_handle),
+                )
+            })
+    }
+
+    fn update_physics_handles(world: &mut World, entities: &[Entity]) {
+        let mut body_set = world
+            .resources
+            .get_mut::<DefaultBodySet<f32>>()
+            .expect("body set was not inserted into world");
+
+        let mut collider_set = world
+            .resources
+            .get_mut::<DefaultColliderSet<f32>>()
+            .expect("body set was not inserted into world");
+
+        for entity in entities {
+            if let Some(rigid_body_handle) =
+            world.get_component::<DefaultBodyHandle>(entity.clone())
+            {
+                if let Some(rigid_body) =
+                body_set.rigid_body_mut(rigid_body_handle.deref().clone())
+                {
+                    rigid_body.set_user_data(Some(Box::new(entity.clone())));
+                }
+            }
+
+            if let Some(collider_handle) =
+            world.get_component::<DefaultColliderHandle>(entity.clone())
+            {
+                if let Some(collider) =
+                collider_set.get_mut(collider_handle.deref().clone())
+                {
+                    collider.set_user_data(Some(Box::new(entity.clone())));
+                }
+            }
         }
     }
 }
@@ -112,145 +235,29 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
                         world.insert(
                             (),
                             transposed_data.into_iter().map(|data| {
-                                let position = PositionComponent::from_position_data(&data[0].position);
-                                let position_states = data
-                                    .iter()
-                                    .map(|sphere_data| {
-                                        PositionState::from_position_data(&sphere_data.position)
-                                    })
-                                    .collect::<Vec<_>>();
+                                let (position, position_animation) = Self::position_animation(&data);
 
-                                let position_animation = Animation::without_times(
-                                    position_states,
-                                    LoopEmpty,
-                                    LerpFactorGenerator,
-                                );
-
-                                let sphere = Sphere::new(data[0].radius);
-                                let sphere_states = data
-                                    .iter()
-                                    .map(|sphere_data| SphereState::new(sphere_data.radius))
-                                    .collect::<Vec<_>>();
-
-                                let sphere_animation =
-                                    Animation::without_times(sphere_states, LoopEmpty, LerpFactorGenerator);
+                                let (sphere, sphere_animation) = Self::sphere_animation(&data);
 
                                 (position, position_animation, sphere, sphere_animation)
                             }),
                         );
                     }
                     LoadMode::Radius => {
-                        let mut rng = thread_rng();
-
-                        let offset = (limits.sphere_count() - 1) as f32 * 0.5;
-                        let factor = 16.0 / limits.sphere_count() as f32;
-
                         let entity_data = {
-                            let mut body_set = world
-                                .resources
-                                .get_mut::<DefaultBodySet<f32>>()
-                                .expect("body set was not inserted into world");
+                            Self::sphere_physics(world, &limits, |i| transposed_data[i][0].radius)
+                                .zip(&transposed_data)
+                                .map(|((_, position, rigid_body, collider, force_generator), data)| {
+                                    let (sphere, sphere_animation) = Self::sphere_animation(data);
 
-                            let mut collider_set = world
-                                .resources
-                                .get_mut::<DefaultColliderSet<f32>>()
-                                .expect("body set was not inserted into world");
-
-                            let mut force_generator_set = world
-                                .resources
-                                .get_mut::<DefaultForceGeneratorSet<f32>>()
-                                .expect("force generator set was not inserted into world");
-
-                            transposed_data
-                                .into_iter()
-                                .enumerate()
-                                .map(|(i, data)| {
-                                    let sphere = Sphere::new(data[0].radius);
-                                    let sphere_states = data
-                                        .iter()
-                                        .map(|sphere_data| SphereState::new(sphere_data.radius))
-                                        .collect::<Vec<_>>();
-
-                                    let sphere_animation = Animation::without_times(
-                                        sphere_states,
-                                        LoopEmpty,
-                                        LerpFactorGenerator,
-                                    );
-
-                                    let position = PositionComponent(vec3(
-                                        (i as f32 - offset) * factor,
-                                        rng.gen_range(-0.05, 0.05),
-                                        rng.gen_range(-0.05, 0.05),
-                                    ));
-
-                                    let rigid_body = RigidBodyDesc::<f32>::new()
-                                        .translation(position.0.clone())
-                                        .gravity_enabled(false)
-                                        .status(BodyStatus::Dynamic)
-                                        .build();
-
-                                    let rigid_body_handle = BodyPartHandle(body_set.insert(rigid_body), 0);
-
-                                    let shape_handle = ShapeHandle::<f32>::new(Ball::new(sphere.radius));
-                                    let collider = ColliderDesc::new(shape_handle)
-                                        .density(2190.0)
-                                        .build(rigid_body_handle);
-
-                                    let collider_handle = collider_set.insert(collider);
-
-                                    let force_generator =
-                                        DragSpring::new(rigid_body_handle, position.0.clone(), 0.1);
-
-                                    let force_generator_handle =
-                                        force_generator_set.insert(Box::new(force_generator));
-
-                                    (
-                                        position,
-                                        sphere,
-                                        sphere_animation,
-                                        BodyPartHandleComponent(rigid_body_handle),
-                                        ColliderHandleComponent(collider_handle),
-                                        DefaultForceGeneratorHandleComponent(force_generator_handle),
-                                    )
+                                    (sphere, sphere_animation, position, rigid_body, collider, force_generator)
                                 })
                                 .collect::<Vec<_>>()
                         };
 
                         let entities = world.insert((), entity_data).to_vec();
 
-                        {
-                            let mut body_set = world
-                                .resources
-                                .get_mut::<DefaultBodySet<f32>>()
-                                .expect("body set was not inserted into world");
-
-                            let mut collider_set = world
-                                .resources
-                                .get_mut::<DefaultColliderSet<f32>>()
-                                .expect("body set was not inserted into world");
-
-                            for entity in entities {
-                                if let Some(rigid_body_handle) =
-                                world.get_component::<DefaultBodyHandle>(entity.clone())
-                                {
-                                    if let Some(rigid_body) =
-                                    body_set.rigid_body_mut(rigid_body_handle.deref().clone())
-                                    {
-                                        rigid_body.set_user_data(Some(Box::new(entity.clone())));
-                                    }
-                                }
-
-                                if let Some(collider_handle) =
-                                world.get_component::<DefaultColliderHandle>(entity.clone())
-                                {
-                                    if let Some(collider) =
-                                    collider_set.get_mut(collider_handle.deref().clone())
-                                    {
-                                        collider.set_user_data(Some(Box::new(entity.clone())));
-                                    }
-                                }
-                            }
-                        }
+                        Self::update_physics_handles(world, &entities)
                     }
                 }
 
@@ -258,39 +265,13 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                 Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::Load{ mode, load_mode } })
             },
-            SphereBundleParams::FFT { sphere_count, min_size, low, high, base, sample_rate } => {
+            SphereBundleParams::FFT { sphere_count, min_radius, low, high, base, sample_rate } => {
                 let limits = SphereLimits::new(sphere_count, None);
 
-                let mut rng = thread_rng();
-
-                let offset = (limits.sphere_count() - 1) as f32 * 0.5;
-                let factor = 16.0 / limits.sphere_count() as f32;
-
                 let entity_data = {
-                    let mut body_set = world
-                        .resources
-                        .get_mut::<DefaultBodySet<f32>>()
-                        .expect("body set was not inserted into world");
-
-                    let mut collider_set = world
-                        .resources
-                        .get_mut::<DefaultColliderSet<f32>>()
-                        .expect("body set was not inserted into world");
-
-                    let mut force_generator_set = world
-                        .resources
-                        .get_mut::<DefaultForceGeneratorSet<f32>>()
-                        .expect("force generator set was not inserted into world");
-
-                    (0..limits.sphere_count())
-                        .map(|i| {
-                            let sphere = Sphere::new(min_size);
-
-                            let position = PositionComponent(vec3(
-                                (i as f32 - offset) * factor,
-                                rng.gen_range(-0.05, 0.05),
-                                rng.gen_range(-0.05, 0.05),
-                            ));
+                    Self::sphere_physics(world, &limits, |_| min_radius)
+                        .map(|(i, position, rigid_body, collider, force_generator)| {
+                            let sphere = Sphere::new(min_radius);
 
                             let low = 20.0 * 1.1f32.powf(i as f32);
                             let high = 20.0 * 1.1f32.powf((i + 1) as f32);
@@ -303,78 +284,18 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                             let filter: DynFilter = Box::new(envelope);
 
-                            let rigid_body = RigidBodyDesc::<f32>::new()
-                                .translation(position.0.clone())
-                                .gravity_enabled(false)
-                                .status(BodyStatus::Dynamic)
-                                .build();
-
-                            let rigid_body_handle = BodyPartHandle(body_set.insert(rigid_body), 0);
-
-                            let shape_handle = ShapeHandle::<f32>::new(Ball::new(sphere.radius));
-                            let collider = ColliderDesc::new(shape_handle)
-                                .density(2190.0)
-                                .build(rigid_body_handle);
-
-                            let collider_handle = collider_set.insert(collider);
-
-                            let force_generator =
-                                DragSpring::new(rigid_body_handle, position.0.clone(), 0.1);
-
-                            let force_generator_handle =
-                                force_generator_set.insert(Box::new(force_generator));
-
-                            (
-                                position,
-                                sphere,
-                                filter,
-                                BodyPartHandleComponent(rigid_body_handle),
-                                ColliderHandleComponent(collider_handle),
-                                DefaultForceGeneratorHandleComponent(force_generator_handle),
-                            )
+                            (sphere, filter, position, rigid_body, collider, force_generator)
                         })
                         .collect::<Vec<_>>()
                 };
 
                 let entities = world.insert((), entity_data).to_vec();
 
-                {
-                    let mut body_set = world
-                        .resources
-                        .get_mut::<DefaultBodySet<f32>>()
-                        .expect("body set was not inserted into world");
-
-                    let mut collider_set = world
-                        .resources
-                        .get_mut::<DefaultColliderSet<f32>>()
-                        .expect("body set was not inserted into world");
-
-                    for entity in entities {
-                        if let Some(rigid_body_handle) =
-                        world.get_component::<DefaultBodyHandle>(entity.clone())
-                        {
-                            if let Some(rigid_body) =
-                            body_set.rigid_body_mut(rigid_body_handle.deref().clone())
-                            {
-                                rigid_body.set_user_data(Some(Box::new(entity.clone())));
-                            }
-                        }
-
-                        if let Some(collider_handle) =
-                        world.get_component::<DefaultColliderHandle>(entity.clone())
-                        {
-                            if let Some(collider) =
-                            collider_set.get_mut(collider_handle.deref().clone())
-                            {
-                                collider.set_user_data(Some(Box::new(entity.clone())));
-                            }
-                        }
-                    }
-                }
+                Self::update_physics_handles(world, &entities);
 
                 world.resources.insert(limits);
 
-                Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::FFT { min_size } })
+                Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::FFT { min_size: min_radius } })
             }
         }
     }
@@ -425,7 +346,7 @@ impl BundlePhase1 for SphereBundlePhase1 {
             }
             SphereBundlePhase1Params::FFT {min_size} => {
                 builder = builder
-                    .add_system(sphere_fft_system(min_size))
+                    .add_system(sphere_analyzer_system(min_size))
                     .add_system(sphere_shape_system())
             }
         };
@@ -577,7 +498,7 @@ pub fn sphere_shape_system() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn sphere_fft_system(min_size: f32) -> Box<dyn Schedulable> {
+pub fn sphere_analyzer_system(min_size: f32) -> Box<dyn Schedulable> {
     SystemBuilder::new("sphere_fft_system")
         .with_query(<(Write<Sphere>, Write<DynFilter>)>::query())
         .read_resource::<Arc<Mutex<SamplesResource>>>()
