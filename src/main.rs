@@ -91,7 +91,7 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
 
     println!("gpu format: {:?}, cpu format: {:?}", gpu_format, cpu_format);
 
-    let (bundle, source) = application_bundle::<B, _, _>(
+    let (bundle, mut source) = application_bundle::<B, _, _>(
         factory,
         families,
         resolution,
@@ -115,33 +115,30 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
 
     let mut rendering_system = RenderingSystem::new(graph_creator, &mut world)?;
 
-    let frame_count = {
-        let sphere_limits = world
+    let frame_count = world
             .resources
             .get::<SphereLimits>()
             .and_then(|sphere_limits| sphere_limits.frame_count());
 
-        let audio_limits = source.total_duration()
-            .into_iter()
-            .map(|duration| (duration.as_secs_f32() * fps) as usize);
-
-        sphere_limits
-            .into_iter()
-            .chain(audio_limits.into_iter())
-            .min()
-            .expect("neither sphere frame count nor audio duration was inserted into world")
-    };
-
-    for frame in 0..frame_count {
+    let samples_per_frame = ((source.sample_rate() * source.channels() as u32) as f32 / fps) as usize;
+    'a: for frame in 0..frame_count.unwrap_or(std::usize::MAX) {
         world
             .resources
             .get_mut::<HeadlessTime>()
-            .expect("headless time was not inserted into world")
-            .set(Frame::new(frame as f32));
+            .iter_mut()
+            .for_each(|time| time.set(Frame::new(frame as f32)));
 
         schedule.execute(&mut world);
 
         rendering_system.render(&mut world)?;
+
+        for _ in 0..samples_per_frame {
+            if let None = source.next() {
+                if let None = frame_count {
+                    break 'a;
+                }
+            }
+        }
     }
 
     rendering_system.dispose(&mut world);
