@@ -5,7 +5,7 @@ use crate::scene::color_ramp::ColorRamp;
 use crate::scene::environment::EnvironmentBundle;
 use crate::scene::light::Light;
 use crate::scene::resolution::Resolution;
-use crate::scene::sphere::{LoadMode, SphereBundle};
+use crate::scene::sphere::{LoadMode, SphereBundle, SphereBundleParams};
 use crate::Mode;
 use crate::ENVIRONMENT_MAP_PATH;
 use anyhow::Error;
@@ -14,15 +14,18 @@ use rendy::command::{Families, Graphics};
 use rendy::factory::Factory;
 use rendy::hal::Backend;
 use rendy::init::winit::window::Window;
+use std::path::Path;
+use crate::audio::{SamplesBundle, CaptureSource};
+use rodio::{Source, Sample};
 
-pub fn application_bundle<B: Backend>(
+pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
     factory: Factory<B>,
     families: Families<B>,
     resolution: Resolution,
     window: Option<Window>,
-    mode: Mode,
-    load_mode: LoadMode,
-) -> Result<impl Bundle, Error> {
+    sphere_bundle_params: SphereBundleParams<P>,
+    source: S,
+) -> Result<(impl Bundle, CaptureSource<S>), Error> where S::Item: Sample {
     let graphics_family = families
         .with_capability::<Graphics>()
         .ok_or(anyhow!("this GRAPHICS CARD do not support GRAPHICS"))?;
@@ -69,18 +72,22 @@ pub fn application_bundle<B: Backend>(
 
     application_bundle.add_resource(color_ramp);
 
-    match &load_mode {
-        LoadMode::Radius => {
+    match &sphere_bundle_params {
+        SphereBundleParams::Load { load_mode: LoadMode::Radius, .. } | SphereBundleParams::FFT { .. } => {
             application_bundle.add_bundle(PhysicsBundle::new(vec3(0.0, 0.0, 0.0)));
-        }
+        },
         _ => {}
     }
 
-    application_bundle.add_bundle(SphereBundle::new(
-        "assets/scenes/out2.json",
-        mode,
-        load_mode,
-    ));
+    /*application_bundle.add_bundle(SphereBundle::new(
+        Some(("assets/scenes/out2.json", load_mode, mode))
+    ));*/
 
-    Ok(application_bundle)
+    application_bundle.add_bundle(SphereBundle::new(sphere_bundle_params));
+
+    let (fft_bundle, source) = SamplesBundle::new(source);
+
+    application_bundle.add_bundle(fft_bundle);
+
+    Ok((application_bundle, source))
 }

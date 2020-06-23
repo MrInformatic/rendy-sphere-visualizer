@@ -15,7 +15,7 @@ use nphysics3d::object::{
     DefaultColliderHandle, DefaultColliderSet,
 };
 use nphysics3d::world::{DefaultGeometricalWorld, DefaultMechanicalWorld, MechanicalWorld};
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Deref};
 
 pub struct PhysicsBundle {
     gravity: Vec3,

@@ -4,6 +4,8 @@ extern crate rendy;
 extern crate lazy_static;
 #[macro_use]
 extern crate anyhow;
+#[macro_use]
+extern crate shrinkwraprs;
 
 #[cfg(test)]
 #[macro_use]
@@ -30,16 +32,19 @@ use rendy::resource::Tiling;
 use crate::animation::Frame;
 use crate::application::application_bundle;
 use crate::bundle::{Bundle, BundlePhase1};
-use crate::scene::limits::Limits;
 use crate::scene::resolution::Resolution;
-use crate::scene::sphere::LoadMode;
+use crate::scene::sphere::{LoadMode, SphereBundleParams, SphereLimits};
 use crate::scene::time::HeadlessTime;
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use image::ColorType;
 use legion::world::{Universe, World};
 use rendy::wsi::Surface;
 use serde::export::fmt::Debug;
 use std::path::{Path, PathBuf};
+use rodio::{Source, Sample, Decoder, play_raw, default_output_device};
+use std::io::BufReader;
+use std::fs::File;
+use rodio::source::SineWave;
 
 pub mod animation;
 pub mod application;
@@ -52,20 +57,23 @@ pub mod mem;
 pub mod node;
 pub mod physics;
 pub mod scene;
+pub mod audio;
 
 lazy_static! {
     static ref ENVIRONMENT_MAP_PATH: PathBuf =
         crate::application_root_dir().join("assets/environment/sides/");
 }
 
-fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug>(
+fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2: 'static + AsRef<Path>, S: Source>(
     mut world: World,
     factory: Factory<B>,
     families: Families<B>,
     output_directory: P,
-    load_mode: LoadMode,
-) -> Result<(), Error> {
+    sphere_bundle_params: SphereBundleParams<P2>,
+    source: S
+) -> Result<(), Error> where S::Item: Sample{
     let resolution = Resolution::new(3840, 2160);
+    let fps = 60.0f32;
 
     let gpu_format = choose_format(
         &factory,
@@ -83,13 +91,13 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug>(
 
     println!("gpu format: {:?}, cpu format: {:?}", gpu_format, cpu_format);
 
-    let bundle = application_bundle::<B>(
+    let (bundle, source) = application_bundle::<B, _, _>(
         factory,
         families,
         resolution,
         None,
-        Mode::Headless,
-        load_mode,
+        sphere_bundle_params,
+        source
     )?;
 
     let mut schedule = bundle
@@ -107,11 +115,20 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug>(
     let mut rendering_system = RenderingSystem::new(graph_creator, &mut world)?;
 
     let frame_count = {
-        world
+        let sphere_limits = world
             .resources
-            .get::<Limits>()
-            .expect("limits was not inserted into world")
-            .frame_count()
+            .get::<SphereLimits>()
+            .and_then(|sphere_limits| sphere_limits.frame_count());
+
+        let audio_limits = source.total_duration()
+            .into_iter()
+            .map(|duration| (duration.as_secs_f32() * fps) as usize);
+
+        sphere_limits
+            .into_iter()
+            .chain(audio_limits.into_iter())
+            .min()
+            .expect("neither sphere frame count nor audio duration was inserted into world")
     };
 
     for frame in 0..frame_count {
@@ -131,28 +148,29 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug>(
     Ok(())
 }
 
-fn init<B: Backend, T: 'static>(
+fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + Send>(
     mut world: World,
     factory: Factory<B>,
     families: Families<B>,
     surface: Surface<B>,
     window: Window,
     event_loop: EventLoop<T>,
-    load_mode: LoadMode,
-) -> Result<(), Error> {
+    sphere_bundle_params: SphereBundleParams<P>,
+    source: S
+) -> Result<(), Error> where S::Item: Sample {
     unsafe {
         println!("surface format: {:?}", surface.format(factory.physical()));
     }
 
     let resolution = Resolution::from_physical_size(window.inner_size());
 
-    let bundle = application_bundle::<B>(
+    let (bundle, source) = application_bundle::<B, _, _>(
         factory,
         families,
         resolution,
         Some(window),
-        Mode::Realtime,
-        load_mode,
+        sphere_bundle_params,
+        source
     )?;
 
     let mut schedule = bundle
@@ -165,6 +183,8 @@ fn init<B: Backend, T: 'static>(
     let mut rendering_system = RenderingSystem::new(graph_creator, &mut world)?;
 
     let mut fps = fps_counter::FPSCounter::new();
+
+    play_raw(&default_output_device().expect("No default output device found"), source.convert_samples::<f32>());
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::MainEventsCleared => {
@@ -212,8 +232,18 @@ fn main() -> Result<(), Error> {
             Arg::with_name("pre-calculated-physics")
                 .short('p')
                 .long("pre-calculated-physics")
-                .required(false)
-                .takes_value(false),
+                .value_name("FILE")
+        )
+        .arg(
+            Arg::with_name("real-time-physics")
+                .short('r')
+                .long("real-time-physics")
+                .value_name("FILE")
+        )
+        .arg(
+            Arg::with_name("real-time-analyser")
+                .required(true)
+                .value_name("FILE")
         )
         .arg(
             Arg::with_name("headless")
@@ -222,12 +252,44 @@ fn main() -> Result<(), Error> {
                 .required(false)
                 .value_name("DIRECTORY"),
         )
+        .group(
+            ArgGroup::with_name("mode")
+                .multiple(false)
+                .args(&["pre-calculated-physics", "real-time-physics"])
+        )
         .get_matches();
 
-    let load_mode = match matches.is_present("pre-calculated-physics") {
-        true => LoadMode::PositionRadius,
-        false => LoadMode::Radius,
+    let mode = match matches.is_present("headless") {
+        false => Mode::Realtime,
+        true => Mode::Headless
     };
+
+    let decoder = Decoder::new(BufReader::new(File::open(matches.value_of("real-time-analyser").unwrap())?))?;
+
+    let sphere_bundle_params = if let Some(real_time_physics) = matches.value_of("real-time-physics") {
+        SphereBundleParams::Load {
+            mode,
+            load_mode: LoadMode::Radius,
+            path: real_time_physics.to_string()
+        }
+    } else if let Some(pre_calculated_physics) = matches.value_of("pre-calculated-physics") {
+        SphereBundleParams::Load {
+            mode,
+            load_mode: LoadMode::PositionRadius,
+            path: pre_calculated_physics.to_string()
+        }
+    } else {
+        SphereBundleParams::FFT {
+            min_size: 0.1,
+            sphere_count: 64,
+            low: 20.0,
+            high: 20000.0,
+            base: 2.0,
+            sample_rate: decoder.sample_rate() as f32,
+        }
+    };
+
+
 
     let universe = Universe::new();
 
@@ -240,7 +302,7 @@ fn main() -> Result<(), Error> {
             let rendy = AnyRendy::init_auto(&config).map_err(|e| anyhow!(e))?;
 
             with_any_rendy ! ((rendy) (factory, families) => {
-                render(world, factory, families, output_dir.to_string(), load_mode).expect("could not render")
+                render(world, factory, families, output_dir.to_string(), sphere_bundle_params, decoder).expect("could not render")
             });
         }
         None => {
@@ -254,7 +316,7 @@ fn main() -> Result<(), Error> {
                 .map_err(|e| anyhow!(e))?;
 
             with_any_windowed_rendy!((rendy) (factory, families, surface, window) => {
-                init(world, factory, families, surface, window, event_loop, load_mode).expect("failed to open window")
+                init(world, factory, families, surface, window, event_loop, sphere_bundle_params, decoder).expect("failed to open window")
             });
         }
     }

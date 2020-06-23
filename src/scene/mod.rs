@@ -27,7 +27,6 @@ pub mod color_ramp;
 pub mod data;
 pub mod environment;
 pub mod light;
-pub mod limits;
 pub mod resolution;
 pub mod sphere;
 pub mod time;

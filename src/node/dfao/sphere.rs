@@ -6,8 +6,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::node::dfao::DFAOParams;
 //use crate::scene::SceneView;
 use crate::scene::camera::Camera;
-use crate::scene::limits::Limits;
-use crate::scene::sphere::{PositionComponent, Sphere};
+use crate::scene::sphere::{PositionComponent, Sphere, SphereLimits};
 use genmesh::generators::Cube;
 use legion::query::{IntoQuery, Read};
 use legion::world::World;
@@ -208,7 +207,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
 
         let limits = aux
             .resources
-            .get::<Limits>()
+            .get::<SphereLimits>()
             .expect("limits was not inserted into world");
 
         let sphere_count = limits.sphere_count();
@@ -330,7 +329,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
 
         let limits = aux
             .resources
-            .get::<Limits>()
+            .get::<SphereLimits>()
             .expect("limits was not inserted into world");
 
         let args = Args {
