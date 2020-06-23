@@ -2,8 +2,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 //use crate::scene::SceneView;
 use crate::scene::camera::Camera;
 use crate::scene::color_ramp::ColorRamp;
-use crate::scene::limits::Limits;
-use crate::scene::sphere::{PositionComponent, Sphere};
+use crate::scene::sphere::{PositionComponent, Sphere, SphereLimits};
 use genmesh::generators::{IndexedPolygon, SharedVertex, SphereUv};
 use genmesh::EmitTriangles;
 use legion::query::{IntoQuery, Read};
@@ -180,7 +179,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for GBufferDesc {
 
         let limits = aux
             .resources
-            .get::<Limits>()
+            .get::<SphereLimits>()
             .expect("limits was not inserted into world");
 
         let sphere_count = limits.sphere_count();
@@ -283,7 +282,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
 
         let limits = aux
             .resources
-            .get::<Limits>()
+            .get::<SphereLimits>()
             .expect("limits was not inserted into world");
 
         let color_ramp = aux
