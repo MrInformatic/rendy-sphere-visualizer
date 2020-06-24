@@ -1,10 +1,8 @@
 use crate::bundle::{Bundle, BundlePhase1};
 use crate::world::sphere::PositionComponent;
 use anyhow::Error;
-use legion::query::{IntoQuery, Read, Write};
-use legion::schedule::{Builder, Schedulable};
-use legion::system::SystemBuilder;
-use legion::world::World;
+use legion::prelude::*;
+use legion::systems::schedule::Builder;
 use nalgebra::RealField;
 use nalgebra_glm::Vec3;
 use nphysics3d::force_generator::{DefaultForceGeneratorHandle, DefaultForceGeneratorSet};
@@ -16,6 +14,7 @@ use nphysics3d::object::{
 };
 use nphysics3d::world::{DefaultGeometricalWorld, DefaultMechanicalWorld, MechanicalWorld};
 use std::ops::{DerefMut};
+use crate::world::ResWorld;
 
 pub struct PhysicsBundle {
     gravity: Vec3,
@@ -30,7 +29,7 @@ impl PhysicsBundle {
 impl Bundle for PhysicsBundle {
     type Phase1 = PhysicsBundlePhase1;
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         let mechanical_world = DefaultMechanicalWorld::<f32>::new(self.gravity);
         let geometrical_world = DefaultGeometricalWorld::<f32>::new();
 
@@ -53,7 +52,7 @@ impl Bundle for PhysicsBundle {
 pub struct PhysicsBundlePhase1;
 
 impl BundlePhase1 for PhysicsBundlePhase1 {
-    fn add_systems(self, _world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, _world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
         Ok(builder.add_system(physics_system()))
     }
 }
@@ -92,7 +91,7 @@ pub fn physics_system() -> Box<dyn Schedulable> {
                 );
 
                 query
-                    .iter(world)
+                    .iter_mut(world)
                     .for_each(|(body_part_handle, mut position_component)| {
                         let body_part_handle = body_part_handle.0;
                         if let Some(body) = bodies.get(body_part_handle.0) {

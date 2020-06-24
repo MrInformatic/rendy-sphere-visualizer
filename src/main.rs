@@ -37,13 +37,14 @@ use crate::world::sphere::{LoadMode, SphereLimits};
 use crate::world::time::HeadlessTime;
 use clap::{App, Arg, ArgGroup};
 use image::ColorType;
-use legion::world::{Universe, World};
 use rendy::wsi::Surface;
 use serde::export::fmt::Debug;
 use std::path::{Path, PathBuf};
 use rodio::{Source, Sample, Decoder, play_raw, default_output_device};
 use std::io::BufReader;
 use std::fs::File;
+use legion::prelude::*;
+use crate::world::ResWorld;
 
 pub mod animation;
 pub mod application;
@@ -63,7 +64,7 @@ lazy_static! {
 }
 
 fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2: 'static + AsRef<Path>, S: Source>(
-    mut world: World,
+    mut world: ResWorld,
     factory: Factory<B>,
     families: Families<B>,
     output_directory: P,
@@ -114,9 +115,9 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
     let mut rendering_system = RenderingSystem::new(graph_creator, &mut world)?;
 
     let frame_count = world
-            .resources
-            .get::<SphereLimits>()
-            .and_then(|sphere_limits| sphere_limits.frame_count());
+        .resources
+        .get::<SphereLimits>()
+        .and_then(|sphere_limits| sphere_limits.frame_count());
 
     let samples_per_frame = ((source.sample_rate() * source.channels() as u32) as f32 / fps) as usize;
     'a: for frame in 0..frame_count.unwrap_or(std::usize::MAX) {
@@ -126,7 +127,7 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
             .iter_mut()
             .for_each(|time| time.set(Frame::new(frame as f32)));
 
-        schedule.execute(&mut world);
+        schedule.execute(&mut world.world, &mut world.resources);
 
         rendering_system.render(&mut world)?;
 
@@ -145,7 +146,7 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
 }
 
 fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + Send>(
-    mut world: World,
+    mut world: ResWorld,
     factory: Factory<B>,
     families: Families<B>,
     surface: Surface<B>,
@@ -207,7 +208,8 @@ fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + 
             _ => (),
         },
         Event::RedrawRequested(_) => {
-            schedule.execute(&mut world);
+            schedule.execute(&mut world.world, &mut world.resources);
+
             rendering_system
                 .render(&mut world)
                 .expect("could not render image");
@@ -284,6 +286,10 @@ fn main() -> Result<(), Error> {
 
     let world = universe.create_world();
 
+    let resources = Resources::default();
+
+    let res_world = ResWorld::new(resources, world);
+
     match matches.value_of("headless") {
         Some(output_dir) => {
             let config: Config = Default::default();
@@ -291,7 +297,7 @@ fn main() -> Result<(), Error> {
             let rendy = AnyRendy::init_auto(&config).map_err(|e| anyhow!(e))?;
 
             with_any_rendy ! ((rendy) (factory, families) => {
-                render(world, factory, families, output_dir.to_string(), sphere_bundle_params, decoder).expect("could not render")
+                render(res_world, factory, families, output_dir.to_string(), sphere_bundle_params, decoder).expect("could not render")
             });
         }
         None => {
@@ -305,7 +311,7 @@ fn main() -> Result<(), Error> {
                 .map_err(|e| anyhow!(e))?;
 
             with_any_windowed_rendy!((rendy) (factory, families, surface, window) => {
-                init(world, factory, families, surface, window, event_loop, sphere_bundle_params, decoder).expect("failed to open window")
+                init(res_world, factory, families, surface, window, event_loop, sphere_bundle_params, decoder).expect("failed to open window")
             });
         }
     }

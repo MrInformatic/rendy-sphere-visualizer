@@ -7,8 +7,7 @@ use crate::graph::node::dfao::DFAOParams;
 use crate::world::camera::Camera;
 use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
 use genmesh::generators::Cube;
-use legion::query::{IntoQuery, Read};
-use legion::world::World;
+use legion::prelude::*;
 use nalgebra_glm::{Mat4, Vec3};
 use rendy::command::{DrawIndexedCommand, QueueId, RenderPassEncoder};
 use rendy::factory::Factory;
@@ -34,6 +33,8 @@ use rendy::resource::{
 };
 use rendy::shader::{ShaderSet, SpirvShader};
 use std::mem::size_of;
+use crate::world::ResWorld;
+use std::ops::Deref;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -87,7 +88,7 @@ impl DFAOSphereDesc {
     }
 }
 
-impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, ResWorld> for DFAOSphereDesc {
     type Pipeline = DFAOSphere<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -169,7 +170,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &ResWorld) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("failed to compile shader set")
@@ -180,7 +181,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for DFAOSphereDesc {
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        aux: &World,
+        aux: &ResWorld,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -310,7 +311,7 @@ pub struct DFAOSphere<B: Backend> {
     params: DFAOParams,
 }
 
-impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, ResWorld> for DFAOSphere<B> {
     type Desc = DFAOSphereDesc;
 
     fn prepare(
@@ -319,7 +320,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &World,
+        aux: &ResWorld,
     ) -> PrepareResult {
         let camera = aux
             .resources
@@ -387,7 +388,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
             let query = <(Read<Sphere>, Read<PositionComponent>)>::query();
 
             for (instance, (sphere, position)) in
-                instance_slice.iter_mut().zip(query.iter_immutable(aux))
+                instance_slice.iter_mut().zip(query.iter(aux.deref()))
             {
                 *instance = Instance {
                     center: transform_point(&position.0, camera.get_view_matrix()),
@@ -404,7 +405,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &World,
+        _aux: &ResWorld,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -441,5 +442,5 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for DFAOSphere<B> {
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &ResWorld) {}
 }

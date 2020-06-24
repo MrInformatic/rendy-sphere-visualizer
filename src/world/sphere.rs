@@ -5,11 +5,9 @@ use crate::world::data::{PositionData, SphereData};
 use crate::world::time::{HeadlessTime, Time};
 use crate::Mode;
 use anyhow::Error;
-use legion::query::{IntoQuery, Read, Write};
-use legion::schedule::{Builder, Schedulable};
+use legion::prelude::*;
+use legion::systems::schedule::Builder;
 use legion::storage::Component;
-use legion::system::SystemBuilder;
-use legion::world::World;
 use nalgebra::{Isometry3, Translation, UnitQuaternion};
 use nalgebra_glm::{vec3, Vec3};
 use ncollide3d::shape::{Ball, ShapeHandle};
@@ -31,6 +29,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use crate::audio::{SamplesResource, IIRFilter, Envelope, Filter};
 use legion::entity::Entity;
+use crate::world::ResWorld;
+
 
 type DynFilter = Box<dyn Filter + Send + Sync>;
 
@@ -100,7 +100,7 @@ impl<P: AsRef<Path>> SphereBundle<P> {
         (sphere, sphere_animation)
     }
 
-    fn sphere_physics<'a, F: 'a + FnMut(usize) -> f32>(world: &'a mut World, limits: &SphereLimits, mut radius: F) -> impl 'a + Iterator<Item=(usize, PositionComponent, DefaultBodyPartHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent)>{
+    fn sphere_physics<'a, F: 'a + FnMut(usize) -> f32>(world: &'a mut ResWorld, limits: &SphereLimits, mut radius: F) -> impl 'a + Iterator<Item=(usize, PositionComponent, DefaultBodyPartHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent)>{
         let mut rng = thread_rng();
 
         let offset = (limits.sphere_count() - 1) as f32 * 0.5;
@@ -160,7 +160,7 @@ impl<P: AsRef<Path>> SphereBundle<P> {
             })
     }
 
-    fn update_physics_handles(world: &mut World, entities: &[Entity]) {
+    fn update_physics_handles(world: &mut ResWorld, entities: &[Entity]) {
         let mut body_set = world
             .resources
             .get_mut::<DefaultBodySet<f32>>()
@@ -198,7 +198,7 @@ impl<P: AsRef<Path>> SphereBundle<P> {
 impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
     type Phase1 = SphereBundlePhase1;
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         match self.params {
             SphereBundleParams::Load { path, load_mode, mode } => {
                 match &mode {
@@ -319,7 +319,7 @@ pub struct SphereBundlePhase1 {
 }
 
 impl BundlePhase1 for SphereBundlePhase1 {
-    fn add_systems(self, _world: &World, mut builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, _world: &ResWorld, mut builder: Builder) -> Result<Builder, Error> {
         match self.params {
             SphereBundlePhase1Params::Load { mode: Mode::Realtime, load_mode: LoadMode::PositionRadius } => {
                 builder =
@@ -463,7 +463,7 @@ pub fn sphere_animation_system_realtime<
         )>::query())
         .read_resource::<Time>()
         .build(|_, world, time, query| {
-            query.iter(world).for_each(|(mut property, animation)| {
+            query.iter_mut(world).for_each(|(mut property, animation)| {
                 property.set_property(animation.interpolate(time.current_frame()))
             });
         })
@@ -480,7 +480,7 @@ pub fn sphere_animation_system_headless<
         )>::query())
         .read_resource::<HeadlessTime>()
         .build(|_, world, time, query| {
-            query.iter(world).for_each(|(mut property, animation)| {
+            query.iter_mut(world).for_each(|(mut property, animation)| {
                 property.set_property(animation.interpolate(time.current_frame()))
             });
         })
@@ -491,7 +491,7 @@ pub fn sphere_shape_system() -> Box<dyn Schedulable> {
         .with_query(<(Read<Sphere>, Read<DefaultColliderHandleComponent>)>::query())
         .write_resource::<DefaultColliderSet<f32>>()
         .build(|_, world, collider_set, query| {
-            query.iter(world).for_each(|(sphere, collider_handle)| {
+            query.iter_mut(world).for_each(|(sphere, collider_handle)| {
                 if let Some(collider) = collider_set.get_mut(collider_handle.0.clone()) {
                     let shape_handle = ShapeHandle::<f32>::new(Ball::new(sphere.radius));
 
@@ -508,7 +508,7 @@ pub fn sphere_analyzer_system(min_size: f32) -> Box<dyn Schedulable> {
         .build(move |_, world, samples, query| {
             let mut samples = samples.lock().unwrap();
 
-            query.iter(world).for_each(|(mut sphere, mut filter)| {
+            query.iter_mut(world).for_each(|(mut sphere, mut filter)| {
                 let mut value = sphere.radius;
                 for sample in samples.iter() {
                     value = filter.tick(*sample) * 2.0;

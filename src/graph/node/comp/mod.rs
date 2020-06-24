@@ -32,8 +32,8 @@ use rendy::shader::{ShaderSet, SpirvShader};
 
 use crate::world::camera::Camera;
 use crate::world::environment::Environment;
-use legion::world::World;
 use std::mem::size_of;
+use crate::world::ResWorld;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -65,7 +65,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub struct CompDesc;
 
-impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for CompDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, ResWorld> for CompDesc {
     type Pipeline = Comp<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -186,7 +186,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for CompDesc {
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &ResWorld) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("could not compile shader set")
@@ -197,7 +197,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for CompDesc {
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        _aux: &World,
+        _aux: &ResWorld,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -388,7 +388,7 @@ pub struct Comp<B: Backend> {
     sampler: Escape<Sampler<B>>,
 }
 
-impl<B: Backend> SimpleGraphicsPipeline<B, World> for Comp<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, ResWorld> for Comp<B> {
     type Desc = CompDesc;
 
     fn prepare(
@@ -397,7 +397,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for Comp<B> {
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &World,
+        aux: &ResWorld,
     ) -> PrepareResult {
         let environment = aux
             .resources
@@ -449,7 +449,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for Comp<B> {
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &World,
+        _aux: &ResWorld,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -476,5 +476,5 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for Comp<B> {
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &ResWorld) {}
 }

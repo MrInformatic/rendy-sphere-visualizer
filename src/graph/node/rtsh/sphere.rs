@@ -6,8 +6,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::world::camera::Camera;
 use crate::world::environment::Environment;
 use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
-use legion::query::{IntoQuery, Read};
-use legion::world::World;
+use legion::prelude::*;
 use nalgebra_glm::{
     identity, quat, quat_normalize, quat_to_mat4, scale, translate, vec3, Mat4, Vec3,
 };
@@ -35,6 +34,8 @@ use rendy::resource::{
 };
 use rendy::shader::{ShaderSet, SpirvShader};
 use std::mem::size_of;
+use crate::world::ResWorld;
+use std::ops::Deref;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -114,7 +115,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub struct RTSHSphereDesc;
 
-impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for RTSHSphereDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, ResWorld> for RTSHSphereDesc {
     type Pipeline = RTSHSphere<B>;
 
     fn images(&self) -> Vec<ImageAccess> {
@@ -184,7 +185,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for RTSHSphereDesc {
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &ResWorld) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("failed to compile shader set")
@@ -195,7 +196,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for RTSHSphereDesc {
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        aux: &World,
+        aux: &ResWorld,
         _buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -317,7 +318,7 @@ pub struct RTSHSphere<B: Backend> {
     cone_mesh: Mesh<B>,
 }
 
-impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, ResWorld> for RTSHSphere<B> {
     type Desc = RTSHSphereDesc;
 
     fn prepare(
@@ -326,7 +327,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &World,
+        aux: &ResWorld,
     ) -> PrepareResult {
         let environment = aux
             .resources
@@ -398,7 +399,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
             let query = <(Read<Sphere>, Read<PositionComponent>)>::query();
 
             for (instance, (sphere, position)) in
-                instance_slice.iter_mut().zip(query.iter_immutable(aux))
+                instance_slice.iter_mut().zip(query.iter(aux.deref()))
             {
                 *instance = Instance::new(
                     camera.get_view_matrix(),
@@ -418,7 +419,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &World,
+        _aux: &ResWorld,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -455,5 +456,5 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for RTSHSphere<B> {
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &ResWorld) {}
 }

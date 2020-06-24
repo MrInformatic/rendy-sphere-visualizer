@@ -22,8 +22,8 @@ use rendy::resource::{
 };
 use serde::export::PhantomData;
 
-use legion::world::World;
 use std::fmt::Debug;
+use crate::world::ResWorld;
 
 #[derive(Debug)]
 pub struct CaptureDesc<A, D> {
@@ -48,7 +48,7 @@ impl<
         B: Backend,
         A: 'static + CaptureAction<D> + Debug + Send + Sync,
         D: 'static + Copy + Debug + Send + Sync,
-    > NodeDesc<B, World> for CaptureDesc<A, D>
+    > NodeDesc<B, ResWorld> for CaptureDesc<A, D>
 {
     type Node = Capture<B, A, D>;
 
@@ -67,7 +67,7 @@ impl<
         factory: &mut Factory<B>,
         family: &mut Family<B, QueueType>,
         _queue: usize,
-        _aux: &World,
+        _aux: &ResWorld,
         buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
     ) -> Result<Self::Node, NodeBuildError> {
@@ -166,30 +166,6 @@ impl<B: Backend> PerFrame<B> {
             }
 
             unsafe {
-                /*encoder.blit_image(
-                    src_image.raw(),
-                    node_image.layout.clone(),
-                    dst_image.raw(),
-                    ILayout::TransferDstOptimal,
-                    Filter::Nearest,
-                    Some(ImageBlit {
-                        src_bounds: IOffset::ZERO
-                            .into_bounds(&src_image.kind().extent()),
-                        src_subresource: SubresourceLayers {
-                            aspects: node_image.range.aspects.clone(),
-                            layers: node_image.range.layers.clone(),
-                            level: 0,
-                        },
-                        dst_bounds: IOffset::ZERO
-                            .into_bounds(&dst_image.kind().extent()),
-                        dst_subresource: SubresourceLayers {
-                            aspects: node_image.range.aspects.clone(),
-                            layers: node_image.range.layers.clone(),
-                            level: 0,
-                        }
-                    })
-                )*/
-
                 encoder.copy_image(
                     src_image.raw(),
                     node_image.layout.clone(),
@@ -250,7 +226,7 @@ impl<B: Backend> PerFrame<B> {
 
     fn save<D: Copy, A: CaptureAction<D>>(
         &mut self,
-        world: &World,
+        world: &ResWorld,
         factory: &Factory<B>,
         action: &mut A,
     ) -> Result<(), Error> {
@@ -300,7 +276,7 @@ impl<
         B: Backend,
         A: 'static + CaptureAction<D> + Debug + Send + Sync,
         D: 'static + Copy + Debug + Send + Sync,
-    > Node<B, World> for Capture<B, A, D>
+    > Node<B, ResWorld> for Capture<B, A, D>
 {
     type Capability = Transfer;
 
@@ -308,7 +284,7 @@ impl<
         &'a mut self,
         ctx: &GraphContext<B>,
         factory: &Factory<B>,
-        aux: &World,
+        aux: &ResWorld,
         frames: &'a Frames<B>,
     ) -> <Self as NodeSubmittable<'a, B>>::Submittables {
         let Capture {
@@ -321,14 +297,14 @@ impl<
         let for_frame = &mut per_frame[index as usize];
 
         for_frame
-            .save(aux, factory, action)
+            .save(&aux, factory, action)
             .expect("could not save frame");
         for_frame.set_dirty(frame);
 
         Some(&for_frame.submit)
     }
 
-    unsafe fn dispose(self, factory: &mut Factory<B>, aux: &World) {
+    unsafe fn dispose(self, factory: &mut Factory<B>, aux: &ResWorld) {
         let Capture {
             mut per_frame,
             mut action,
@@ -353,5 +329,5 @@ impl<
 }
 
 pub trait CaptureAction<D> {
-    fn exec(&mut self, world: &World, image_data: &[D], frame: u64) -> Result<(), Error>;
+    fn exec(&mut self, world: &ResWorld, image_data: &[D], frame: u64) -> Result<(), Error>;
 }
