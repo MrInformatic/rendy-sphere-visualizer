@@ -1,11 +1,10 @@
 use crate::bundle::{Bundle, BundlePhase1};
 use crate::world::resolution::Resolution;
 use anyhow::Error;
-use legion::query::{IntoQuery, Write};
-use legion::schedule::{Builder, Schedulable};
-use legion::system::SystemBuilder;
-use legion::world::World;
+use legion::prelude::*;
+use legion::systems::schedule::Builder;
 use nalgebra_glm::{diagonal4x4, vec4, zero, Mat4};
+use crate::world::ResWorld;
 
 pub struct CameraBundle {
     view_matrix: Mat4,
@@ -28,7 +27,7 @@ impl CameraBundle {
 impl Bundle for CameraBundle {
     type Phase1 = CameraBundlePhase1;
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         let CameraBundle {
             view_matrix,
             fov,
@@ -55,7 +54,7 @@ impl Bundle for CameraBundle {
 pub struct CameraBundlePhase1;
 
 impl BundlePhase1 for CameraBundlePhase1 {
-    fn add_systems(self, world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
         Ok(builder.add_system(camera_resize_system(world)))
     }
 }
@@ -120,7 +119,7 @@ impl Camera {
     }
 }
 
-pub fn camera_resize_system(world: &World) -> Box<dyn Schedulable> {
+pub fn camera_resize_system(world: &ResWorld) -> Box<dyn Schedulable> {
     let resolution = world
         .resources
         .get::<Resolution>()

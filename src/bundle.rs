@@ -1,18 +1,19 @@
 use anyhow::Error;
-use legion::resource::Resource;
-use legion::schedule::{Builder, Schedulable, Schedule};
-use legion::world::World;
+use legion::prelude::*;
+use legion::systems::schedule::Builder;
+use legion::systems::resource::Resource;
+use crate::world::ResWorld;
 
 pub trait Bundle {
     type Phase1: BundlePhase1;
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error>;
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error>;
 }
 
 pub trait DynBundle {
     fn add_entities_and_resources_dyn(
         self: Box<Self>,
-        world: &mut World,
+        world: &mut ResWorld,
     ) -> Result<Box<dyn DynBundlePhase1>, Error>;
 }
 
@@ -22,7 +23,7 @@ where
 {
     fn add_entities_and_resources_dyn(
         self: Box<Self>,
-        world: &mut World,
+        world: &mut ResWorld,
     ) -> Result<Box<dyn DynBundlePhase1>, Error> {
         fn boxing<B: 'static + BundlePhase1>(bundle: B) -> Box<dyn DynBundlePhase1> {
             Box::new(bundle)
@@ -34,9 +35,9 @@ where
 }
 
 pub trait BundlePhase1 {
-    fn add_systems(self, world: &World, builder: Builder) -> Result<Builder, Error>;
+    fn add_systems(self, world: &ResWorld, builder: Builder) -> Result<Builder, Error>;
 
-    fn build_schedule(self, world: &World) -> Result<Schedule, Error>
+    fn build_schedule(self, world: &ResWorld) -> Result<Schedule, Error>
     where
         Self: Sized,
     {
@@ -45,17 +46,17 @@ pub trait BundlePhase1 {
 }
 
 impl BundlePhase1 for () {
-    fn add_systems(self, _world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, _world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
         Ok(builder)
     }
 }
 
 pub trait DynBundlePhase1 {
-    fn add_systems_dyn(self: Box<Self>, world: &World, builder: Builder) -> Result<Builder, Error>;
+    fn add_systems_dyn(self: Box<Self>, world: &ResWorld, builder: Builder) -> Result<Builder, Error>;
 }
 
 impl<T: BundlePhase1> DynBundlePhase1 for T {
-    fn add_systems_dyn(self: Box<Self>, world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems_dyn(self: Box<Self>, world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
         self.add_systems(world, builder)
     }
 }
@@ -103,7 +104,7 @@ impl BundleGroup {
 impl Bundle for BundleGroup {
     type Phase1 = BundleGroupPhase1;
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         let mut bundles = vec![];
 
         for bundle in self.bundles {
@@ -119,7 +120,7 @@ pub struct BundleGroupPhase1 {
 }
 
 impl BundlePhase1 for BundleGroupPhase1 {
-    fn add_systems(self, world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
         let mut builder = builder;
 
         for bundle in self.bundles {
@@ -143,7 +144,7 @@ impl<R: Resource> ResourceBundle<R> {
 impl<R: Resource> Bundle for ResourceBundle<R> {
     type Phase1 = ();
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<(), Error> {
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<(), Error> {
         world.resources.insert(self.resource);
         Ok(())
     }
@@ -162,13 +163,13 @@ impl SystemBundle {
 impl Bundle for SystemBundle {
     type Phase1 = Self;
 
-    fn add_entities_and_resources(self, _world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, _world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         Ok(self)
     }
 }
 
 impl BundlePhase1 for SystemBundle {
-    fn add_systems(self, _world: &World, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems(self, _world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
         Ok(builder.add_system(self.system))
     }
 }

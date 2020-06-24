@@ -32,22 +32,22 @@ use serde::export::PhantomData;
 
 use crate::event::StateId;
 use crate::world::resolution::Resolution;
-use legion::world::World;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufWriter;
 use std::ops::Deref;
 use std::path::Path;
+use crate::world::ResWorld;
 
 pub mod node;
 
 pub trait Output<B: Backend> {
     fn build(
         &mut self,
-        world: &World,
+        world: &ResWorld,
         factory: &mut Factory<B>,
-        graph_builder: &mut GraphBuilder<B, World>,
-        comp_subpass: SubpassBuilder<B, World>,
+        graph_builder: &mut GraphBuilder<B, ResWorld>,
+        comp_subpass: SubpassBuilder<B, ResWorld>,
         resolution: &Resolution,
     ) -> Result<(), Error>;
 }
@@ -65,10 +65,10 @@ impl<B: Backend> SurfaceOutput<B> {
 impl<B: Backend> Output<B> for SurfaceOutput<B> {
     fn build(
         &mut self,
-        world: &World,
+        world: &ResWorld,
         factory: &mut Factory<B>,
-        graph_builder: &mut GraphBuilder<B, World>,
-        comp_subpass: SubpassBuilder<B, World>,
+        graph_builder: &mut GraphBuilder<B, ResWorld>,
+        comp_subpass: SubpassBuilder<B, ResWorld>,
         resolution: &Resolution,
     ) -> Result<(), Error> {
         let extend = Extent2D {
@@ -131,10 +131,10 @@ impl<
 {
     fn build(
         &mut self,
-        _world: &World,
+        _world: &ResWorld,
         _factory: &mut Factory<B>,
-        graph_builder: &mut GraphBuilder<B, World>,
-        comp_subpass: SubpassBuilder<B, World>,
+        graph_builder: &mut GraphBuilder<B, ResWorld>,
+        comp_subpass: SubpassBuilder<B, ResWorld>,
         resolution: &Resolution,
     ) -> Result<(), Error> {
         let comp_image = graph_builder.create_image(
@@ -234,7 +234,7 @@ impl<P: AsRef<Path>> SavePng<P> {
 }
 
 impl<P: 'static + AsRef<Path> + Send + Sync + Clone> CaptureAction<u8> for SavePng<P> {
-    fn exec(&mut self, world: &World, image_data: &[u8], frame: u64) -> Result<(), Error> {
+    fn exec(&mut self, world: &ResWorld, image_data: &[u8], frame: u64) -> Result<(), Error> {
         let data = image_data.to_vec();
         let resolution = world
             .resources
@@ -268,14 +268,14 @@ impl<P> Drop for SavePng<P> {
 }
 
 pub trait GraphCreator<B: Backend> {
-    fn rebuild(&mut self, world: &World) -> bool;
+    fn rebuild(&mut self, world: &ResWorld) -> bool;
 
     fn build(
         &mut self,
-        world: &World,
+        world: &ResWorld,
         factory: &mut Factory<B>,
         families: &mut Families<B>,
-    ) -> Result<Graph<B, World>, Error>;
+    ) -> Result<Graph<B, ResWorld>, Error>;
 }
 
 pub struct SphereVisualizerGraphCreator<B: Backend, O: Output<B>> {
@@ -285,7 +285,7 @@ pub struct SphereVisualizerGraphCreator<B: Backend, O: Output<B>> {
 }
 
 impl<B: Backend, O: Output<B>> SphereVisualizerGraphCreator<B, O> {
-    pub fn new(world: &World, output: O) -> Self {
+    pub fn new(world: &ResWorld, output: O) -> Self {
         let resolution = world
             .resources
             .get::<Resolution>()
@@ -300,7 +300,7 @@ impl<B: Backend, O: Output<B>> SphereVisualizerGraphCreator<B, O> {
 }
 
 impl<B: Backend, O: Output<B>> GraphCreator<B> for SphereVisualizerGraphCreator<B, O> {
-    fn rebuild(&mut self, world: &World) -> bool {
+    fn rebuild(&mut self, world: &ResWorld) -> bool {
         let resolution = world
             .resources
             .get::<Resolution>()
@@ -311,10 +311,10 @@ impl<B: Backend, O: Output<B>> GraphCreator<B> for SphereVisualizerGraphCreator<
 
     fn build(
         &mut self,
-        world: &World,
+        world: &ResWorld,
         factory: &mut Factory<B>,
         families: &mut Families<B>,
-    ) -> Result<Graph<B, World>, Error> {
+    ) -> Result<Graph<B, ResWorld>, Error> {
         let resolution = world
             .resources
             .get::<Resolution>()
@@ -550,11 +550,11 @@ impl<B: Backend, O: Output<B>> GraphCreator<B> for SphereVisualizerGraphCreator<
 
 pub struct RenderingSystem<B: Backend, G: GraphCreator<B>> {
     graph_creator: G,
-    graph: Option<Graph<B, World>>,
+    graph: Option<Graph<B, ResWorld>>,
 }
 
 impl<B: Backend, G: GraphCreator<B>> RenderingSystem<B, G> {
-    pub fn new(mut graph_creator: G, world: &mut World) -> Result<Self, Error> {
+    pub fn new(mut graph_creator: G, world: &mut ResWorld) -> Result<Self, Error> {
         let mut factory = world
             .resources
             .get_mut::<Factory<B>>()
@@ -573,7 +573,7 @@ impl<B: Backend, G: GraphCreator<B>> RenderingSystem<B, G> {
         })
     }
 
-    pub fn render(&mut self, world: &mut World) -> Result<(), Error> {
+    pub fn render(&mut self, world: &mut ResWorld) -> Result<(), Error> {
         let mut factory = world
             .resources
             .get_mut::<Factory<B>>()
@@ -601,7 +601,7 @@ impl<B: Backend, G: GraphCreator<B>> RenderingSystem<B, G> {
         Ok(())
     }
 
-    pub fn dispose(&mut self, world: &mut World) {
+    pub fn dispose(&mut self, world: &mut ResWorld) {
         let mut factory = world
             .resources
             .get_mut::<Factory<B>>()

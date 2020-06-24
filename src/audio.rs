@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use crate::bundle::Bundle;
 use anyhow::Error;
-use legion::world::World;
+use crate::world::ResWorld;
 
 pub struct SamplesBundle {
     samples_resource: Arc<Mutex<SamplesResource>>,
@@ -21,7 +21,7 @@ impl SamplesBundle {
 impl Bundle for SamplesBundle {
     type Phase1 = ();
 
-    fn add_entities_and_resources(self, world: &mut World) -> Result<Self::Phase1, Error> {
+    fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         let Self {
             samples_resource,
         } = self;

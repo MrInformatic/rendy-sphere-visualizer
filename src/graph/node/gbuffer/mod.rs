@@ -4,8 +4,7 @@ use crate::world::color_ramp::ColorRamp;
 use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
 use genmesh::generators::{IndexedPolygon, SharedVertex, SphereUv};
 use genmesh::EmitTriangles;
-use legion::query::{IntoQuery, Read};
-use legion::world::World;
+use legion::prelude::*;
 use nalgebra_glm::{
     identity, inverse_transpose, mat4_to_mat3, scale, translate, vec3, Mat3, Mat4, Vec3,
 };
@@ -30,6 +29,8 @@ use rendy::mesh::{AsVertex, Mesh, Normal, PosNorm, Position, VertexFormat};
 use rendy::resource::{Buffer, BufferInfo, DescriptorSet, DescriptorSetLayout, Escape, Handle};
 use rendy::shader::{ShaderSet, SpirvShader};
 use std::mem::size_of;
+use crate::world::ResWorld;
+use std::ops::Deref;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq)]
@@ -97,7 +98,7 @@ lazy_static::lazy_static! {
 #[derive(Debug)]
 pub struct GBufferDesc;
 
-impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for GBufferDesc {
+impl<B: Backend> SimpleGraphicsPipelineDesc<B, ResWorld> for GBufferDesc {
     type Pipeline = GBuffer<B>;
 
     fn colors(&self) -> Vec<ColorBlendDesc> {
@@ -154,7 +155,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for GBufferDesc {
         }
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &World) -> ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &ResWorld) -> ShaderSet<B> {
         SHADERS
             .build(factory, Default::default())
             .expect("failed to compile shader set")
@@ -165,7 +166,7 @@ impl<B: Backend> SimpleGraphicsPipelineDesc<B, World> for GBufferDesc {
         ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
         queue: QueueId,
-        aux: &World,
+        aux: &ResWorld,
         _buffers: Vec<NodeBuffer>,
         _images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
@@ -263,7 +264,7 @@ pub struct GBuffer<B: Backend> {
     sphere_mesh: Mesh<B>,
 }
 
-impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
+impl<B: Backend> SimpleGraphicsPipeline<B, ResWorld> for GBuffer<B> {
     type Desc = GBufferDesc;
 
     fn prepare(
@@ -272,7 +273,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         index: usize,
-        aux: &World,
+        aux: &ResWorld,
     ) -> PrepareResult {
         let camera = aux
             .resources
@@ -346,7 +347,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
             let query = <(Read<Sphere>, Read<PositionComponent>)>::query();
 
             for (instance, (sphere, position)) in
-                instance_slice.iter_mut().zip(query.iter_immutable(aux))
+                instance_slice.iter_mut().zip(query.iter(aux.deref()))
             {
                 let radius = sphere.radius();
 
@@ -369,7 +370,7 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
         layout: &<B as Backend>::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         index: usize,
-        _aux: &World,
+        _aux: &ResWorld,
     ) {
         unsafe {
             encoder.bind_graphics_descriptor_sets(
@@ -404,5 +405,5 @@ impl<B: Backend> SimpleGraphicsPipeline<B, World> for GBuffer<B> {
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &World) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &ResWorld) {}
 }
