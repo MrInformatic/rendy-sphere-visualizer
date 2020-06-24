@@ -2,7 +2,9 @@ use crate::bundle::Bundle;
 use crate::cubemap::HdrCubeMapBuilder;
 use crate::ext::CUBEMAP_SAMPLER_DESC;
 use crate::world::light::Light;
+use crate::world::ResWorld;
 use anyhow::Error;
+use legion::prelude::*;
 use legion::prelude::*;
 use nalgebra_glm::Vec3;
 use rendy::command::QueueId;
@@ -13,8 +15,6 @@ use rendy::hal::Backend;
 use rendy::texture::Texture;
 use serde::export::PhantomData;
 use std::path::Path;
-use legion::prelude::*;
-use crate::world::ResWorld;
 
 pub struct EnvironmentBundle<P, B> {
     ambient_light: Vec3,

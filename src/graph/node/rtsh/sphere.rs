@@ -6,6 +6,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::world::camera::Camera;
 use crate::world::environment::Environment;
 use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
+use crate::world::ResWorld;
 use legion::prelude::*;
 use nalgebra_glm::{
     identity, quat, quat_normalize, quat_to_mat4, scale, translate, vec3, Mat4, Vec3,
@@ -34,7 +35,6 @@ use rendy::resource::{
 };
 use rendy::shader::{ShaderSet, SpirvShader};
 use std::mem::size_of;
-use crate::world::ResWorld;
 use std::ops::Deref;
 
 #[repr(C)]

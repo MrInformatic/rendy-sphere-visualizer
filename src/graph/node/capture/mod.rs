@@ -22,8 +22,8 @@ use rendy::resource::{
 };
 use serde::export::PhantomData;
 
-use std::fmt::Debug;
 use crate::world::ResWorld;
+use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct CaptureDesc<A, D> {

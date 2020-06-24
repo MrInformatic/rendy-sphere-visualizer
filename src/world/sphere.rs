@@ -1,13 +1,19 @@
 use crate::animation::{Animation, Frame, LerpFactorGenerator, LoopEmpty, Property, State};
+use crate::audio::{Envelope, Filter, IIRFilter, SamplesResource};
 use crate::bundle::{Bundle, BundlePhase1};
-use crate::physics::{BodyPartHandleComponent, ColliderHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent, DefaultBodyPartHandleComponent};
+use crate::physics::{
+    BodyPartHandleComponent, ColliderHandleComponent, DefaultBodyPartHandleComponent,
+    DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent,
+};
 use crate::world::data::{PositionData, SphereData};
 use crate::world::time::{HeadlessTime, Time};
+use crate::world::ResWorld;
 use crate::Mode;
 use anyhow::Error;
+use legion::entity::Entity;
 use legion::prelude::*;
-use legion::systems::schedule::Builder;
 use legion::storage::Component;
+use legion::systems::schedule::Builder;
 use nalgebra::{Isometry3, Translation, UnitQuaternion};
 use nalgebra_glm::{vec3, Vec3};
 use ncollide3d::shape::{Ball, ShapeHandle};
@@ -27,10 +33,6 @@ use std::io::BufReader;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use crate::audio::{SamplesResource, IIRFilter, Envelope, Filter};
-use legion::entity::Entity;
-use crate::world::ResWorld;
-
 
 type DynFilter = Box<dyn Filter + Send + Sync>;
 
@@ -55,39 +57,42 @@ pub enum SphereBundleParams<P> {
         release: f32,
         threshold: f32,
         sample_rate: f32,
-    }
+    },
 }
 
 pub struct SphereBundle<P> {
-    params: SphereBundleParams<P>
+    params: SphereBundleParams<P>,
 }
 
 impl<P: AsRef<Path>> SphereBundle<P> {
     pub fn new(params: SphereBundleParams<P>) -> Self {
-        Self {
-            params
-        }
+        Self { params }
     }
 
-    fn position_animation(data: &[SphereData]) -> (PositionComponent, Animation<PositionState, LoopEmpty, LerpFactorGenerator>) {
+    fn position_animation(
+        data: &[SphereData],
+    ) -> (
+        PositionComponent,
+        Animation<PositionState, LoopEmpty, LerpFactorGenerator>,
+    ) {
         let position = PositionComponent::from_position_data(&data[0].position);
         let position_states = data
             .iter()
-            .map(|sphere_data| {
-                PositionState::from_position_data(&sphere_data.position)
-            })
+            .map(|sphere_data| PositionState::from_position_data(&sphere_data.position))
             .collect::<Vec<_>>();
 
-        let position_animation = Animation::without_times(
-            position_states,
-            LoopEmpty,
-            LerpFactorGenerator,
-        );
+        let position_animation =
+            Animation::without_times(position_states, LoopEmpty, LerpFactorGenerator);
 
         (position, position_animation)
     }
 
-    fn sphere_animation(data: &[SphereData]) -> (Sphere, Animation<SphereState, LoopEmpty, LerpFactorGenerator>) {
+    fn sphere_animation(
+        data: &[SphereData],
+    ) -> (
+        Sphere,
+        Animation<SphereState, LoopEmpty, LerpFactorGenerator>,
+    ) {
         let sphere = Sphere::new(data[0].radius);
         let sphere_states = data
             .iter()
@@ -100,7 +105,20 @@ impl<P: AsRef<Path>> SphereBundle<P> {
         (sphere, sphere_animation)
     }
 
-    fn sphere_physics<'a, F: 'a + FnMut(usize) -> f32>(world: &'a mut ResWorld, limits: &SphereLimits, mut radius: F) -> impl 'a + Iterator<Item=(usize, PositionComponent, DefaultBodyPartHandleComponent, DefaultColliderHandleComponent, DefaultForceGeneratorHandleComponent)>{
+    fn sphere_physics<'a, F: 'a + FnMut(usize) -> f32>(
+        world: &'a mut ResWorld,
+        limits: &SphereLimits,
+        mut radius: F,
+    ) -> impl 'a
+           + Iterator<
+        Item = (
+            usize,
+            PositionComponent,
+            DefaultBodyPartHandleComponent,
+            DefaultColliderHandleComponent,
+            DefaultForceGeneratorHandleComponent,
+        ),
+    > {
         let mut rng = thread_rng();
 
         let offset = (limits.sphere_count() - 1) as f32 * 0.5;
@@ -121,43 +139,40 @@ impl<P: AsRef<Path>> SphereBundle<P> {
             .get_mut::<DefaultForceGeneratorSet<f32>>()
             .expect("force generator set was not inserted into world");
 
-        (0..limits.sphere_count())
-            .map(move |i| {
-                let position = PositionComponent(vec3(
-                    (i as f32 - offset) * factor,
-                    rng.gen_range(-0.05, 0.05),
-                    rng.gen_range(-0.05, 0.05),
-                ));
+        (0..limits.sphere_count()).map(move |i| {
+            let position = PositionComponent(vec3(
+                (i as f32 - offset) * factor,
+                rng.gen_range(-0.05, 0.05),
+                rng.gen_range(-0.05, 0.05),
+            ));
 
-                let rigid_body = RigidBodyDesc::<f32>::new()
-                    .translation(position.0.clone())
-                    .gravity_enabled(false)
-                    .status(BodyStatus::Dynamic)
-                    .build();
+            let rigid_body = RigidBodyDesc::<f32>::new()
+                .translation(position.0.clone())
+                .gravity_enabled(false)
+                .status(BodyStatus::Dynamic)
+                .build();
 
-                let rigid_body_handle = BodyPartHandle(body_set.insert(rigid_body), 0);
+            let rigid_body_handle = BodyPartHandle(body_set.insert(rigid_body), 0);
 
-                let shape_handle = ShapeHandle::<f32>::new(Ball::new((radius)(i)));
-                let collider = ColliderDesc::new(shape_handle)
-                    .density(2190.0)
-                    .build(rigid_body_handle);
+            let shape_handle = ShapeHandle::<f32>::new(Ball::new((radius)(i)));
+            let collider = ColliderDesc::new(shape_handle)
+                .density(2190.0)
+                .build(rigid_body_handle);
 
-                let collider_handle = collider_set.insert(collider);
+            let collider_handle = collider_set.insert(collider);
 
-                let force_generator =
-                    DragSpring::new(rigid_body_handle, position.0.clone(), 0.1);
+            let force_generator = DragSpring::new(rigid_body_handle, position.0.clone(), 0.1);
 
-                let force_generator_handle =
-                    force_generator_set.insert(Box::new(force_generator));
+            let force_generator_handle = force_generator_set.insert(Box::new(force_generator));
 
-                (
-                    i,
-                    position,
-                    BodyPartHandleComponent(rigid_body_handle),
-                    ColliderHandleComponent(collider_handle),
-                    DefaultForceGeneratorHandleComponent(force_generator_handle),
-                )
-            })
+            (
+                i,
+                position,
+                BodyPartHandleComponent(rigid_body_handle),
+                ColliderHandleComponent(collider_handle),
+                DefaultForceGeneratorHandleComponent(force_generator_handle),
+            )
+        })
     }
 
     fn update_physics_handles(world: &mut ResWorld, entities: &[Entity]) {
@@ -173,21 +188,18 @@ impl<P: AsRef<Path>> SphereBundle<P> {
 
         for entity in entities {
             if let Some(rigid_body_handle) =
-            world.get_component::<DefaultBodyHandle>(entity.clone())
+                world.get_component::<DefaultBodyHandle>(entity.clone())
             {
-                if let Some(rigid_body) =
-                body_set.rigid_body_mut(rigid_body_handle.deref().clone())
+                if let Some(rigid_body) = body_set.rigid_body_mut(rigid_body_handle.deref().clone())
                 {
                     rigid_body.set_user_data(Some(Box::new(entity.clone())));
                 }
             }
 
             if let Some(collider_handle) =
-            world.get_component::<DefaultColliderHandle>(entity.clone())
+                world.get_component::<DefaultColliderHandle>(entity.clone())
             {
-                if let Some(collider) =
-                collider_set.get_mut(collider_handle.deref().clone())
-                {
+                if let Some(collider) = collider_set.get_mut(collider_handle.deref().clone()) {
                     collider.set_user_data(Some(Box::new(entity.clone())));
                 }
             }
@@ -200,7 +212,11 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
     fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
         match self.params {
-            SphereBundleParams::Load { path, load_mode, mode } => {
+            SphereBundleParams::Load {
+                path,
+                load_mode,
+                mode,
+            } => {
                 match &mode {
                     Mode::Realtime => {
                         let time = Time::new(60.0);
@@ -237,7 +253,8 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
                         world.insert(
                             (),
                             transposed_data.into_iter().map(|data| {
-                                let (position, position_animation) = Self::position_animation(&data);
+                                let (position, position_animation) =
+                                    Self::position_animation(&data);
 
                                 let (sphere, sphere_animation) = Self::sphere_animation(&data);
 
@@ -249,11 +266,24 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
                         let entity_data = {
                             Self::sphere_physics(world, &limits, |i| transposed_data[i][0].radius)
                                 .zip(&transposed_data)
-                                .map(|((_, position, rigid_body, collider, force_generator), data)| {
-                                    let (sphere, sphere_animation) = Self::sphere_animation(data);
+                                .map(
+                                    |(
+                                        (_, position, rigid_body, collider, force_generator),
+                                        data,
+                                    )| {
+                                        let (sphere, sphere_animation) =
+                                            Self::sphere_animation(data);
 
-                                    (sphere, sphere_animation, position, rigid_body, collider, force_generator)
-                                })
+                                        (
+                                            sphere,
+                                            sphere_animation,
+                                            position,
+                                            rigid_body,
+                                            collider,
+                                            force_generator,
+                                        )
+                                    },
+                                )
                                 .collect::<Vec<_>>()
                         };
 
@@ -265,9 +295,20 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                 world.resources.insert(limits);
 
-                Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::Load{ mode, load_mode } })
-            },
-            SphereBundleParams::Analyze { sphere_count, min_radius, low, high, attack, release, threshold, sample_rate } => {
+                Ok(SphereBundlePhase1 {
+                    params: SphereBundlePhase1Params::Load { mode, load_mode },
+                })
+            }
+            SphereBundleParams::Analyze {
+                sphere_count,
+                min_radius,
+                low,
+                high,
+                attack,
+                release,
+                threshold,
+                sample_rate,
+            } => {
                 let limits = SphereLimits::new(sphere_count, None);
 
                 let entity_data = {
@@ -281,13 +322,22 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                             let low_pass = IIRFilter::low_pass((), high_cutoff, 1.0, sample_rate);
 
-                            let high_pass = IIRFilter::high_pass(low_pass, low_cutoff, 1.0, sample_rate);
+                            let high_pass =
+                                IIRFilter::high_pass(low_pass, low_cutoff, 1.0, sample_rate);
 
-                            let envelope = Envelope::new(high_pass, threshold, attack, release, sample_rate);
+                            let envelope =
+                                Envelope::new(high_pass, threshold, attack, release, sample_rate);
 
                             let filter: DynFilter = Box::new(envelope);
 
-                            (sphere, filter, position, rigid_body, collider, force_generator)
+                            (
+                                sphere,
+                                filter,
+                                position,
+                                rigid_body,
+                                collider,
+                                force_generator,
+                            )
                         })
                         .collect::<Vec<_>>()
                 };
@@ -298,20 +348,19 @@ impl<P: AsRef<Path>> Bundle for SphereBundle<P> {
 
                 world.resources.insert(limits);
 
-                Ok(SphereBundlePhase1 { params: SphereBundlePhase1Params::Analyze { min_size: min_radius } })
+                Ok(SphereBundlePhase1 {
+                    params: SphereBundlePhase1Params::Analyze {
+                        min_size: min_radius,
+                    },
+                })
             }
         }
     }
 }
 
 pub enum SphereBundlePhase1Params {
-    Load {
-        mode: Mode,
-        load_mode: LoadMode,
-    },
-    Analyze {
-        min_size: f32
-    }
+    Load { mode: Mode, load_mode: LoadMode },
+    Analyze { min_size: f32 },
 }
 
 pub struct SphereBundlePhase1 {
@@ -321,7 +370,10 @@ pub struct SphereBundlePhase1 {
 impl BundlePhase1 for SphereBundlePhase1 {
     fn add_systems(self, _world: &ResWorld, mut builder: Builder) -> Result<Builder, Error> {
         match self.params {
-            SphereBundlePhase1Params::Load { mode: Mode::Realtime, load_mode: LoadMode::PositionRadius } => {
+            SphereBundlePhase1Params::Load {
+                mode: Mode::Realtime,
+                load_mode: LoadMode::PositionRadius,
+            } => {
                 builder =
                     builder.add_system(sphere_animation_system_realtime::<Sphere, SphereState>());
                 builder = builder.add_system(sphere_animation_system_realtime::<
@@ -329,7 +381,10 @@ impl BundlePhase1 for SphereBundlePhase1 {
                     PositionState,
                 >());
             }
-            SphereBundlePhase1Params::Load { mode: Mode::Headless, load_mode: LoadMode::PositionRadius } => {
+            SphereBundlePhase1Params::Load {
+                mode: Mode::Headless,
+                load_mode: LoadMode::PositionRadius,
+            } => {
                 builder =
                     builder.add_system(sphere_animation_system_headless::<Sphere, SphereState>());
                 builder = builder.add_system(sphere_animation_system_headless::<
@@ -337,17 +392,24 @@ impl BundlePhase1 for SphereBundlePhase1 {
                     PositionState,
                 >());
             }
-            SphereBundlePhase1Params::Load { mode, load_mode: LoadMode::Radius } => {
+            SphereBundlePhase1Params::Load {
+                mode,
+                load_mode: LoadMode::Radius,
+            } => {
                 match mode {
-                    Mode::Realtime => builder =
-                        builder.add_system(sphere_animation_system_realtime::<Sphere, SphereState>()),
-                    Mode::Headless => builder =
-                        builder.add_system(sphere_animation_system_headless::<Sphere, SphereState>()),
+                    Mode::Realtime => {
+                        builder = builder
+                            .add_system(sphere_animation_system_realtime::<Sphere, SphereState>())
+                    }
+                    Mode::Headless => {
+                        builder = builder
+                            .add_system(sphere_animation_system_headless::<Sphere, SphereState>())
+                    }
                 }
 
                 builder = builder.add_system(sphere_shape_system());
             }
-            SphereBundlePhase1Params::Analyze {min_size} => {
+            SphereBundlePhase1Params::Analyze { min_size } => {
                 builder = builder
                     .add_system(sphere_analyzer_system(min_size))
                     .add_system(sphere_shape_system())
@@ -432,7 +494,7 @@ impl State for PositionState {
 
 pub struct SphereLimits {
     sphere_count: usize,
-    frame_count: Option<usize>
+    frame_count: Option<usize>,
 }
 
 impl SphereLimits {

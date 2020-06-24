@@ -1,20 +1,28 @@
-use rodio::{Source, Sample};
-use cpal::Sample as CPalSaple;
-use std::time::Duration;
-use std::sync::{Arc, Mutex};
 use crate::bundle::Bundle;
-use anyhow::Error;
 use crate::world::ResWorld;
+use anyhow::Error;
+use cpal::Sample as CPalSaple;
+use rodio::{Sample, Source};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 pub struct SamplesBundle {
     samples_resource: Arc<Mutex<SamplesResource>>,
 }
 
 impl SamplesBundle {
-    pub fn new<S: Source>(source: S) -> (Self, CaptureSource<S>) where S::Item: Sample{
+    pub fn new<S: Source>(source: S) -> (Self, CaptureSource<S>)
+    where
+        S::Item: Sample,
+    {
         let source = CaptureSource::new(source);
 
-        (Self { samples_resource: source.samples_resource() }, source)
+        (
+            Self {
+                samples_resource: source.samples_resource(),
+            },
+            source,
+        )
     }
 }
 
@@ -22,9 +30,7 @@ impl Bundle for SamplesBundle {
     type Phase1 = ();
 
     fn add_entities_and_resources(self, world: &mut ResWorld) -> Result<Self::Phase1, Error> {
-        let Self {
-            samples_resource,
-        } = self;
+        let Self { samples_resource } = self;
 
         world.resources.insert(samples_resource);
 
@@ -48,7 +54,10 @@ pub struct CaptureSource<S> {
     channel_samples: Vec<f32>,
 }
 
-impl<S: Source> CaptureSource<S> where S::Item: Sample{
+impl<S: Source> CaptureSource<S>
+where
+    S::Item: Sample,
+{
     pub fn new(source: S) -> Self {
         CaptureSource {
             source,
@@ -61,7 +70,10 @@ impl<S: Source> CaptureSource<S> where S::Item: Sample{
     }
 }
 
-impl<S: Source> Source for CaptureSource<S> where S::Item: Sample {
+impl<S: Source> Source for CaptureSource<S>
+where
+    S::Item: Sample,
+{
     fn current_frame_len(&self) -> Option<usize> {
         self.source.current_frame_len()
     }
@@ -79,7 +91,10 @@ impl<S: Source> Source for CaptureSource<S> where S::Item: Sample {
     }
 }
 
-impl<S: Source> Iterator for CaptureSource<S> where S::Item: Sample {
+impl<S: Source> Iterator for CaptureSource<S>
+where
+    S::Item: Sample,
+{
     type Item = S::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -89,7 +104,9 @@ impl<S: Source> Iterator for CaptureSource<S> where S::Item: Sample {
             self.channel_samples.push(x.to_f32());
             if self.channel_samples.len() >= self.source.channels() as usize {
                 let mut samples_resource = self.samples_resource.lock().unwrap();
-                samples_resource.push(self.channel_samples.iter().sum::<f32>() / self.channel_samples.len() as f32);
+                samples_resource.push(
+                    self.channel_samples.iter().sum::<f32>() / self.channel_samples.len() as f32,
+                );
                 self.channel_samples.clear()
             }
         }
@@ -122,15 +139,11 @@ pub struct IIRFilter<F> {
 
 impl<F: Filter> IIRFilter<F> {
     pub fn new(filter: F, mut buffer_a: Vec<f32>, mut buffer_b: Vec<f32>) -> Self {
-        if !buffer_a.is_empty()
-        {
+        if !buffer_a.is_empty() {
             let buffer_a_0 = buffer_a[0];
 
-            buffer_a.iter_mut()
-                .skip(1)
-                .for_each(|i| *i /= buffer_a_0);
-            buffer_b.iter_mut()
-                .for_each(|i| *i /= buffer_a_0);
+            buffer_a.iter_mut().skip(1).for_each(|i| *i /= buffer_a_0);
+            buffer_b.iter_mut().for_each(|i| *i /= buffer_a_0);
 
             buffer_a[0] = 1.0;
         }
@@ -187,11 +200,17 @@ impl<F: Filter> Filter for IIRFilter<F> {
     fn tick(&mut self, sample: f32) -> f32 {
         self.ring_buffer_x.push(self.filter.tick(sample));
 
-        let x = self.ring_buffer_x.iter().zip(self.buffer_b.iter().rev())
+        let x = self
+            .ring_buffer_x
+            .iter()
+            .zip(self.buffer_b.iter().rev())
             .map(|(f, s)| *f * *s)
             .sum::<f32>();
 
-        let y = self.ring_buffer_y.iter().zip(self.buffer_a.iter().skip(1).rev())
+        let y = self
+            .ring_buffer_y
+            .iter()
+            .zip(self.buffer_a.iter().skip(1).rev())
             .map(|(f, s)| *f * *s)
             .sum::<f32>();
 
@@ -216,7 +235,7 @@ impl<F: Filter> Envelope<F> {
             filter,
             attack: threshold.powf(1.0 / (attack * sample_rate)),
             release: threshold.powf(1.0 / (release * sample_rate)),
-            last_sample: 0.0
+            last_sample: 0.0,
         }
     }
 }
@@ -238,14 +257,14 @@ impl<F: Filter> Filter for Envelope<F> {
 
 pub struct RingBuffer<T> {
     buffer: Vec<T>,
-    next_index: usize
+    next_index: usize,
 }
 
 impl<T> RingBuffer<T> {
     pub fn new(buffer: Vec<T>) -> Self {
         Self {
             buffer,
-            next_index: 0
+            next_index: 0,
         }
     }
 
@@ -254,18 +273,22 @@ impl<T> RingBuffer<T> {
         self.next_index = (self.next_index + 1) % self.buffer.len();
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&T> {
-        self.buffer[self.next_index..self.buffer.len()].iter()
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.buffer[self.next_index..self.buffer.len()]
+            .iter()
             .chain(self.buffer[0..self.next_index].iter())
     }
 }
 
 pub enum OptionCaptureSource<S> {
     Capture(CaptureSource<S>),
-    Source(S)
+    Source(S),
 }
 
-impl<S: Source> Source for OptionCaptureSource<S> where S::Item: Sample {
+impl<S: Source> Source for OptionCaptureSource<S>
+where
+    S::Item: Sample,
+{
     fn current_frame_len(&self) -> Option<usize> {
         match self {
             OptionCaptureSource::Capture(source) => source.current_frame_len(),
@@ -295,7 +318,10 @@ impl<S: Source> Source for OptionCaptureSource<S> where S::Item: Sample {
     }
 }
 
-impl<S: Source> Iterator for OptionCaptureSource<S> where S::Item: Sample {
+impl<S: Source> Iterator for OptionCaptureSource<S>
+where
+    S::Item: Sample,
+{
     type Item = S::Item;
 
     fn next(&mut self) -> Option<Self::Item> {

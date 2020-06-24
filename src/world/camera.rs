@@ -1,10 +1,10 @@
 use crate::bundle::{Bundle, BundlePhase1};
 use crate::world::resolution::Resolution;
+use crate::world::ResWorld;
 use anyhow::Error;
 use legion::prelude::*;
 use legion::systems::schedule::Builder;
 use nalgebra_glm::{diagonal4x4, vec4, zero, Mat4};
-use crate::world::ResWorld;
 
 pub struct CameraBundle {
     view_matrix: Mat4,

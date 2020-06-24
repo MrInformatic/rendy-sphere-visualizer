@@ -32,12 +32,12 @@ use serde::export::PhantomData;
 
 use crate::event::StateId;
 use crate::world::resolution::Resolution;
+use crate::world::ResWorld;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufWriter;
 use std::ops::Deref;
 use std::path::Path;
-use crate::world::ResWorld;
 
 pub mod node;
 

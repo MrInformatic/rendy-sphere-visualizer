@@ -35,19 +35,20 @@ use crate::bundle::{Bundle, BundlePhase1};
 use crate::world::resolution::Resolution;
 use crate::world::sphere::{LoadMode, SphereLimits};
 use crate::world::time::HeadlessTime;
+use crate::world::ResWorld;
 use clap::{App, Arg, ArgGroup};
 use image::ColorType;
-use rendy::wsi::Surface;
-use serde::export::fmt::Debug;
-use std::path::{Path, PathBuf};
-use rodio::{Source, Sample, Decoder, play_raw, default_output_device};
-use std::io::BufReader;
-use std::fs::File;
 use legion::prelude::*;
-use crate::world::ResWorld;
+use rendy::wsi::Surface;
+use rodio::{default_output_device, play_raw, Decoder, Sample, Source};
+use serde::export::fmt::Debug;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 
 pub mod animation;
 pub mod application;
+pub mod audio;
 pub mod bundle;
 pub mod cubemap;
 pub mod event;
@@ -56,21 +57,28 @@ pub mod graph;
 pub mod mem;
 pub mod physics;
 pub mod world;
-pub mod audio;
 
 lazy_static! {
     static ref ENVIRONMENT_MAP_PATH: PathBuf =
         crate::application_root_dir().join("assets/environment/sides/");
 }
 
-fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2: 'static + AsRef<Path>, S: Source>(
+fn render<
+    B: Backend,
+    P: 'static + AsRef<Path> + Clone + Send + Sync + Debug,
+    P2: 'static + AsRef<Path>,
+    S: Source,
+>(
     mut world: ResWorld,
     factory: Factory<B>,
     families: Families<B>,
     output_directory: P,
     application_bundle_params: ApplicationBundleParams<P2>,
-    source: S
-) -> Result<(), Error> where S::Item: Sample{
+    source: S,
+) -> Result<(), Error>
+where
+    S::Item: Sample,
+{
     let resolution = Resolution::new(3840, 2160);
     let fps = 60.0f32;
 
@@ -119,7 +127,8 @@ fn render<B: Backend, P: 'static + AsRef<Path> + Clone + Send + Sync + Debug, P2
         .get::<SphereLimits>()
         .and_then(|sphere_limits| sphere_limits.frame_count());
 
-    let samples_per_frame = ((source.sample_rate() * source.channels() as u32) as f32 / fps) as usize;
+    let samples_per_frame =
+        ((source.sample_rate() * source.channels() as u32) as f32 / fps) as usize;
     'a: for frame in 0..frame_count.unwrap_or(std::usize::MAX) {
         world
             .resources
@@ -153,8 +162,11 @@ fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + 
     window: Window,
     event_loop: EventLoop<T>,
     application_bundle_params: ApplicationBundleParams<P>,
-    source: S
-) -> Result<(), Error> where S::Item: Sample {
+    source: S,
+) -> Result<(), Error>
+where
+    S::Item: Sample,
+{
     unsafe {
         println!("surface format: {:?}", surface.format(factory.physical()));
     }
@@ -182,7 +194,10 @@ fn init<B: Backend, T: 'static, P: 'static + AsRef<Path>, S: 'static + Source + 
 
     let mut fps = fps_counter::FPSCounter::new();
 
-    play_raw(&default_output_device().expect("No default output device found"), source.convert_samples::<f32>());
+    play_raw(
+        &default_output_device().expect("No default output device found"),
+        source.convert_samples::<f32>(),
+    );
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::MainEventsCleared => {
@@ -231,18 +246,18 @@ fn main() -> Result<(), Error> {
             Arg::with_name("pre-calculated-physics")
                 .short('p')
                 .long("pre-calculated-physics")
-                .value_name("FILE")
+                .value_name("FILE"),
         )
         .arg(
             Arg::with_name("real-time-physics")
                 .short('r')
                 .long("real-time-physics")
-                .value_name("FILE")
+                .value_name("FILE"),
         )
         .arg(
             Arg::with_name("real-time-analyser")
                 .required(true)
-                .value_name("FILE")
+                .value_name("FILE"),
         )
         .arg(
             Arg::with_name("headless")
@@ -254,34 +269,37 @@ fn main() -> Result<(), Error> {
         .group(
             ArgGroup::with_name("mode")
                 .multiple(false)
-                .args(&["pre-calculated-physics", "real-time-physics"])
+                .args(&["pre-calculated-physics", "real-time-physics"]),
         )
         .get_matches();
 
-    let decoder = Decoder::new(BufReader::new(File::open(matches.value_of("real-time-analyser").unwrap())?))?;
+    let decoder = Decoder::new(BufReader::new(File::open(
+        matches.value_of("real-time-analyser").unwrap(),
+    )?))?;
 
-    let sphere_bundle_params = if let Some(real_time_physics) = matches.value_of("real-time-physics") {
-        ApplicationBundleParams::Load {
-            load_mode: LoadMode::Radius,
-            path: real_time_physics.to_string()
-        }
-    } else if let Some(pre_calculated_physics) = matches.value_of("pre-calculated-physics") {
-        ApplicationBundleParams::Load {
-            load_mode: LoadMode::PositionRadius,
-            path: pre_calculated_physics.to_string()
-        }
-    } else {
-        ApplicationBundleParams::Analyze {
-            min_radius: 0.1,
-            sphere_count: 64,
-            low: 20.0,
-            high: 20000.0,
-            attack: 0.005,
-            release: 0.4,
-            threshold: 0.1,
-        }
-    };
-    
+    let sphere_bundle_params =
+        if let Some(real_time_physics) = matches.value_of("real-time-physics") {
+            ApplicationBundleParams::Load {
+                load_mode: LoadMode::Radius,
+                path: real_time_physics.to_string(),
+            }
+        } else if let Some(pre_calculated_physics) = matches.value_of("pre-calculated-physics") {
+            ApplicationBundleParams::Load {
+                load_mode: LoadMode::PositionRadius,
+                path: pre_calculated_physics.to_string(),
+            }
+        } else {
+            ApplicationBundleParams::Analyze {
+                min_radius: 0.1,
+                sphere_count: 64,
+                low: 20.0,
+                high: 20000.0,
+                attack: 0.005,
+                release: 0.4,
+                threshold: 0.1,
+            }
+        };
+
     let universe = Universe::new();
 
     let world = universe.create_world();

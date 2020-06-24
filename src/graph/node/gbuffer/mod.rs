@@ -2,6 +2,7 @@ use crate::mem::{element, element_multi, CombinedBufferCalculator};
 use crate::world::camera::Camera;
 use crate::world::color_ramp::ColorRamp;
 use crate::world::sphere::{PositionComponent, Sphere, SphereLimits};
+use crate::world::ResWorld;
 use genmesh::generators::{IndexedPolygon, SharedVertex, SphereUv};
 use genmesh::EmitTriangles;
 use legion::prelude::*;
@@ -29,7 +30,6 @@ use rendy::mesh::{AsVertex, Mesh, Normal, PosNorm, Position, VertexFormat};
 use rendy::resource::{Buffer, BufferInfo, DescriptorSet, DescriptorSetLayout, Escape, Handle};
 use rendy::shader::{ShaderSet, SpirvShader};
 use std::mem::size_of;
-use crate::world::ResWorld;
 use std::ops::Deref;
 
 #[repr(C)]

@@ -1,3 +1,4 @@
+use crate::audio::{OptionCaptureSource, SamplesBundle};
 use crate::bundle::{Bundle, BundleGroup};
 use crate::physics::PhysicsBundle;
 use crate::world::camera::CameraBundle;
@@ -14,9 +15,8 @@ use rendy::command::{Families, Graphics};
 use rendy::factory::Factory;
 use rendy::hal::Backend;
 use rendy::init::winit::window::Window;
+use rodio::{Sample, Source};
 use std::path::Path;
-use crate::audio::{SamplesBundle, OptionCaptureSource};
-use rodio::{Source, Sample};
 
 pub enum ApplicationBundleParams<P> {
     Load {
@@ -31,16 +31,13 @@ pub enum ApplicationBundleParams<P> {
         attack: f32,
         release: f32,
         threshold: f32,
-    }
+    },
 }
 
 impl<P: AsRef<Path>> ApplicationBundleParams<P> {
     pub fn sphere_bundle_params(self, sample_rate: f32, mode: Mode) -> SphereBundleParams<P> {
         match self {
-            ApplicationBundleParams::Load {
-                path,
-                load_mode,
-            } => SphereBundleParams::Load {
+            ApplicationBundleParams::Load { path, load_mode } => SphereBundleParams::Load {
                 path,
                 load_mode,
                 mode,
@@ -62,7 +59,7 @@ impl<P: AsRef<Path>> ApplicationBundleParams<P> {
                 release,
                 threshold,
                 sample_rate,
-            }
+            },
         }
     }
 }
@@ -75,7 +72,10 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
     application_bundle_params: ApplicationBundleParams<P>,
     mode: Mode,
     source: S,
-) -> Result<(impl Bundle, OptionCaptureSource<S>), Error> where S::Item: Sample {
+) -> Result<(impl Bundle, OptionCaptureSource<S>), Error>
+where
+    S::Item: Sample,
+{
     let graphics_family = families
         .with_capability::<Graphics>()
         .ok_or(anyhow!("this GRAPHICS CARD do not support GRAPHICS"))?;
@@ -123,9 +123,13 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
     application_bundle.add_resource(color_ramp);
 
     match &application_bundle_params {
-        ApplicationBundleParams::Load { load_mode: LoadMode::Radius, .. } | ApplicationBundleParams::Analyze { .. } => {
+        ApplicationBundleParams::Load {
+            load_mode: LoadMode::Radius,
+            ..
+        }
+        | ApplicationBundleParams::Analyze { .. } => {
             application_bundle.add_bundle(PhysicsBundle::new(vec3(0.0, 0.0, 0.0)));
-        },
+        }
         _ => {}
     }
 
@@ -138,7 +142,9 @@ pub fn application_bundle<B: Backend, P: 'static + AsRef<Path>, S: Source>(
         OptionCaptureSource::Source(source)
     };
 
-    application_bundle.add_bundle(SphereBundle::new(application_bundle_params.sphere_bundle_params(source.sample_rate() as f32, mode)));
+    application_bundle.add_bundle(SphereBundle::new(
+        application_bundle_params.sphere_bundle_params(source.sample_rate() as f32, mode),
+    ));
 
     Ok((application_bundle, source))
 }

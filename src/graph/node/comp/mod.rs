@@ -32,8 +32,8 @@ use rendy::shader::{ShaderSet, SpirvShader};
 
 use crate::world::camera::Camera;
 use crate::world::environment::Environment;
-use std::mem::size_of;
 use crate::world::ResWorld;
+use std::mem::size_of;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

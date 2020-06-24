@@ -1,8 +1,8 @@
+use crate::world::ResWorld;
 use anyhow::Error;
 use legion::prelude::*;
-use legion::systems::schedule::Builder;
 use legion::systems::resource::Resource;
-use crate::world::ResWorld;
+use legion::systems::schedule::Builder;
 
 pub trait Bundle {
     type Phase1: BundlePhase1;
@@ -52,11 +52,19 @@ impl BundlePhase1 for () {
 }
 
 pub trait DynBundlePhase1 {
-    fn add_systems_dyn(self: Box<Self>, world: &ResWorld, builder: Builder) -> Result<Builder, Error>;
+    fn add_systems_dyn(
+        self: Box<Self>,
+        world: &ResWorld,
+        builder: Builder,
+    ) -> Result<Builder, Error>;
 }
 
 impl<T: BundlePhase1> DynBundlePhase1 for T {
-    fn add_systems_dyn(self: Box<Self>, world: &ResWorld, builder: Builder) -> Result<Builder, Error> {
+    fn add_systems_dyn(
+        self: Box<Self>,
+        world: &ResWorld,
+        builder: Builder,
+    ) -> Result<Builder, Error> {
         self.add_systems(world, builder)
     }
 }
