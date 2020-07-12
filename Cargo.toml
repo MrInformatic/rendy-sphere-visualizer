@@ -3,6 +3,10 @@ name = "rendy-sphere-visualizer"
 version = "1.0.0"
 authors = ["MrInformatic <maxundmoritz99199@gmail.com>"]
 edition = "2018"
+readme = "README.md"
+repository = "https://github.com/MrInformatic/rendy-sphere-visualizer"
+license-file = "LICENSE.md"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
