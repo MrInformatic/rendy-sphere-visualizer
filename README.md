@@ -1,14 +1,6 @@
 # Rendy Sphere Visualizer
 
-Rendy Sphere Visualizer is a render optimized for rendering 
-spheres it uses different like distance field ambient occlusion
-and raytraced shadows to archive high fidelity graphics in
-real time. I manly use it as an visualizer for music. As the 
-name implies I have used the Rendy rendering
-framework. Rendy uses gfx-hal which is an hardware abstraction
-layer which abstract many graphics apis like Vulkan, D3D, Metal
-or OpenGL. Therefore, this project can run on a variety of 
-platforms.
+Rendy Sphere Visualizer is a render optimized for rendering spheres it uses different technics like distance field ambient occlusion and raytraced shadows to archive high fidelity graphics in real-time. I mainly use it as a visualizer for music. As the name implies I have used the Rendy rendering framework. Rendy uses gfx-hal which is a hardware abstraction layer that abstracts many graphics APIs like Vulkan, D3D, Metal, or OpenGL. Therefore, this project can run on a variety of platforms.
 
 [![video](http://img.youtube.com/vi/Hfbo6E0vXDM/0.jpg)](http://www.youtube.com/watch?v=Hfbo6E0vXDM "video")
 
@@ -18,13 +10,13 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-Pleas go to [rustup.rs](https://rustup.rs/) and follow the 
+Please go to [rustup.rs](https://rustup.rs/) and follow the 
 instructions. It will be quick and painless (hopefully).
 
 This repository uses [git-lfs](https://git-lfs.github.com/). 
 Please go ahead and download and install git-lfs. Please
 make sure after you have cloned the repository, that you
-pulled the lfs-file with following command.
+pulled the lfs-file with the following command.
 
 ```
 git lfs pull
@@ -48,7 +40,7 @@ cargo run --features metal --release -- AUDIO_FILE[.mp3|.wav|.ogg]
 ```
 
 If you have a problem running the appropriate Command on the
-operating system of your choice fear not opening an issue. 
+the operating system of your choice fears not opening an issue. 
 I do not have all the operating systems at my disposal to test
 all the backends.
 
