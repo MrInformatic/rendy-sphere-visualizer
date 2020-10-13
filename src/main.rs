@@ -244,13 +244,13 @@ fn main() -> Result<(), Error> {
     let matches = App::new("rendy sphere visualizer")
         .arg(
             Arg::with_name("pre-calculated-physics")
-                .short('p')
+                .short("p")
                 .long("pre-calculated-physics")
                 .value_name("FILE"),
         )
         .arg(
             Arg::with_name("real-time-physics")
-                .short('r')
+                .short("r")
                 .long("real-time-physics")
                 .value_name("FILE"),
         )
@@ -261,7 +261,7 @@ fn main() -> Result<(), Error> {
         )
         .arg(
             Arg::with_name("headless")
-                .short('h')
+                .short("h")
                 .long("headless")
                 .required(false)
                 .value_name("DIRECTORY"),
