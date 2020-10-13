@@ -10,7 +10,7 @@ use futures::executor::{LocalPool, ThreadPool};
 use futures::future::RemoteHandle;
 use futures::task::SpawnExt;
 
-use image::png::PNGEncoder;
+use image::png::PngEncoder;
 use image::ColorType;
 
 use rendy::command::Families;
@@ -221,7 +221,7 @@ impl<P: AsRef<Path>> SavePng<P> {
         height: u32,
         color_type: ColorType,
     ) -> Result<(), Error> {
-        let encoder = PNGEncoder::new(BufWriter::new(File::create(
+        let encoder = PngEncoder::new(BufWriter::new(File::create(
             directory.as_ref().join(format!("{:08}.png", frame)),
         )?));
 
